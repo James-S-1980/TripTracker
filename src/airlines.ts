@@ -7,14 +7,14 @@ export type Airline = {
 };
 
 export const airlines: Airline[] = [
-  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "https://logo.clearbit.com/aa.com" },
-  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "https://logo.clearbit.com/alaskaair.com" },
-  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "https://logo.clearbit.com/jetblue.com" },
-  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "https://logo.clearbit.com/delta.com" },
-  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "https://logo.clearbit.com/flyfrontier.com" },
-  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "https://logo.clearbit.com/spirit.com" },
-  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "https://logo.clearbit.com/united.com" },
-  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "https://logo.clearbit.com/southwest.com" },
+  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "https://images.kiwi.com/airlines/64/AA.png" },
+  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "https://images.kiwi.com/airlines/64/AS.png" },
+  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "https://images.kiwi.com/airlines/64/B6.png" },
+  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "https://images.kiwi.com/airlines/64/DL.png" },
+  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
+  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
+  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
+  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "https://images.kiwi.com/airlines/64/WN.png" },
 ];
 
 export function resolveAirline(input: string): Airline {

@@ -31,14 +31,14 @@ const airlineIataByIcao = Object.fromEntries(
 );
 
 const airlineBrands = {
-  AA: { name: "American Airlines", logoUrl: "https://logo.clearbit.com/aa.com" },
-  AS: { name: "Alaska Airlines", logoUrl: "https://logo.clearbit.com/alaskaair.com" },
-  B6: { name: "JetBlue", logoUrl: "https://logo.clearbit.com/jetblue.com" },
-  DL: { name: "Delta Air Lines", logoUrl: "https://logo.clearbit.com/delta.com" },
-  F9: { name: "Frontier Airlines", logoUrl: "https://logo.clearbit.com/flyfrontier.com" },
-  NK: { name: "Spirit Airlines", logoUrl: "https://logo.clearbit.com/spirit.com" },
-  UA: { name: "United Airlines", logoUrl: "https://logo.clearbit.com/united.com" },
-  WN: { name: "Southwest Airlines", logoUrl: "https://logo.clearbit.com/southwest.com" },
+  AA: { name: "American Airlines", logoUrl: "https://images.kiwi.com/airlines/64/AA.png" },
+  AS: { name: "Alaska Airlines", logoUrl: "https://images.kiwi.com/airlines/64/AS.png" },
+  B6: { name: "JetBlue", logoUrl: "https://images.kiwi.com/airlines/64/B6.png" },
+  DL: { name: "Delta Air Lines", logoUrl: "https://images.kiwi.com/airlines/64/DL.png" },
+  F9: { name: "Frontier Airlines", logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
+  NK: { name: "Spirit Airlines", logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
+  UA: { name: "United Airlines", logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
+  WN: { name: "Southwest Airlines", logoUrl: "https://images.kiwi.com/airlines/64/WN.png" },
 };
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
@@ -79,6 +79,11 @@ function statusFromFlight(flight) {
   if (flight.status?.toLowerCase().includes("delay")) return "Delayed";
   if (flight.actual_out) return "Boarding";
   return "Scheduled";
+}
+
+function usefulAirportValue(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized && !/^(?:n\/?a|na|none|null|unknown|tbd|-|--|\?)$/i.test(normalized) ? normalized : "TBD";
 }
 
 function mapFlightAwareFlight(flight, requestedDate) {
@@ -134,10 +139,10 @@ function mapFlightAwareFlight(flight, requestedDate) {
     destination,
     departureTime,
     arrivalTime,
-    boardingGate: flight.gate_origin ?? "TBD",
-    arrivalGate: flight.gate_destination ?? "TBD",
-    terminal: flight.terminal_origin ?? "TBD",
-    arrivalTerminal: flight.terminal_destination ?? "TBD",
+    boardingGate: usefulAirportValue(flight.gate_origin),
+    arrivalGate: usefulAirportValue(flight.gate_destination),
+    terminal: usefulAirportValue(flight.terminal_origin),
+    arrivalTerminal: usefulAirportValue(flight.terminal_destination),
     status,
     progress: flight.progress_percent ?? (status === "Arrived" ? 100 : status === "En Route" ? 50 : 0),
     altitudeFt: flight.filed_altitude ? flight.filed_altitude * 100 : 0,
@@ -534,10 +539,10 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
     destination,
     departureTime: times.departureTime,
     arrivalTime: times.arrivalTime,
-    boardingGate: gates[0]?.[2] ?? "TBD",
-    arrivalGate: gates[1]?.[2] ?? "TBD",
-    terminal: gates[0]?.[1] ?? "TBD",
-    arrivalTerminal: gates[1]?.[1] ?? "TBD",
+    boardingGate: usefulAirportValue(gates[0]?.[2]),
+    arrivalGate: usefulAirportValue(gates[1]?.[2]),
+    terminal: usefulAirportValue(gates[0]?.[1]),
+    arrivalTerminal: usefulAirportValue(gates[1]?.[1]),
     status,
     progress: progressFromTimes(status, times.departureTime, times.arrivalTime),
     altitudeFt: 0,
@@ -605,10 +610,10 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     destination,
     departureTime: times.departureTime,
     arrivalTime: times.arrivalTime,
-    boardingGate: gates[0]?.[2] ?? "TBD",
-    arrivalGate: gates[1]?.[2] ?? "TBD",
-    terminal: gates[0]?.[1] ?? "TBD",
-    arrivalTerminal: gates[1]?.[1] ?? "TBD",
+    boardingGate: usefulAirportValue(gates[0]?.[2]),
+    arrivalGate: usefulAirportValue(gates[1]?.[2]),
+    terminal: usefulAirportValue(gates[0]?.[1]),
+    arrivalTerminal: usefulAirportValue(gates[1]?.[1]),
     status,
     progress: progressFromTimes(status, times.departureTime, times.arrivalTime),
     altitudeFt,

@@ -60,6 +60,20 @@ function statusLead(flight: FlightLeg): string {
   return `Departs in ${durationText(departure - now)}`;
 }
 
+function usefulAirportValue(value: string | undefined): string {
+  const normalized = String(value ?? "").trim();
+  return normalized && !/^(?:n\/?a|na|none|null|unknown|tbd|-|--|\?)$/i.test(normalized) ? normalized : "";
+}
+
+function gateDisplay(terminal: string, gate: string): string {
+  const cleanTerminal = usefulAirportValue(terminal);
+  const cleanGate = usefulAirportValue(gate);
+  if (cleanTerminal && cleanGate) return `${cleanTerminal} / ${cleanGate}`;
+  if (cleanGate) return cleanGate;
+  if (cleanTerminal) return `Terminal ${cleanTerminal}`;
+  return "Pending";
+}
+
 function splitFlightDesignator(value: string): [string, string] {
   const spaced = value.trim().match(/^([A-Z0-9]{2,3})\s+(\d+)$/i);
   if (spaced) return [spaced[1], spaced[2]];
@@ -402,11 +416,11 @@ export function App() {
                   <div className="gate-row">
                     <div>
                       <small>Boarding</small>
-                      <strong>T{activeFlight.terminal} / {activeFlight.boardingGate}</strong>
+                      <strong>{gateDisplay(activeFlight.terminal, activeFlight.boardingGate)}</strong>
                     </div>
                     <div>
                       <small>Arrival</small>
-                      <strong>T{activeFlight.arrivalTerminal} / {activeFlight.arrivalGate}</strong>
+                      <strong>{gateDisplay(activeFlight.arrivalTerminal, activeFlight.arrivalGate)}</strong>
                     </div>
                   </div>
 
@@ -454,13 +468,18 @@ export function App() {
 }
 
 function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUrl?: string; size?: "default" | "small" }) {
-  const [failed, setFailed] = useState(false);
-  const resolvedLogo = logoUrl || airlineLogoFor(code);
+  const [failedUrls, setFailedUrls] = useState<string[]>([]);
+  const fallbackLogo = airlineLogoFor(code);
+  const logoCandidates = [logoUrl, fallbackLogo]
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .filter((value) => !failedUrls.includes(value));
+  const resolvedLogo = logoCandidates[0];
 
   return (
     <span className={`airline-logo ${size}`}>
-      {resolvedLogo && !failed ? (
-        <img alt={`${code} logo`} src={resolvedLogo} onError={() => setFailed(true)} />
+      {resolvedLogo ? (
+        <img alt={`${code} logo`} src={resolvedLogo} onError={() => setFailedUrls((current) => [...current, resolvedLogo])} />
       ) : (
         <strong>{code.slice(0, 2).toUpperCase()}</strong>
       )}
