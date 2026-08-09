@@ -18,6 +18,17 @@ const airlineIcaoByIata = {
   WN: "SWA",
 };
 
+const airlineBrands = {
+  AA: { name: "American Airlines", logoUrl: "https://logo.clearbit.com/aa.com" },
+  AS: { name: "Alaska Airlines", logoUrl: "https://logo.clearbit.com/alaskaair.com" },
+  B6: { name: "JetBlue", logoUrl: "https://logo.clearbit.com/jetblue.com" },
+  DL: { name: "Delta Air Lines", logoUrl: "https://logo.clearbit.com/delta.com" },
+  F9: { name: "Frontier Airlines", logoUrl: "https://logo.clearbit.com/flyfrontier.com" },
+  NK: { name: "Spirit Airlines", logoUrl: "https://logo.clearbit.com/spirit.com" },
+  UA: { name: "United Airlines", logoUrl: "https://logo.clearbit.com/united.com" },
+  WN: { name: "Southwest Airlines", logoUrl: "https://logo.clearbit.com/southwest.com" },
+};
+
 const airportCatalog = {
   ATL: { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", lat: 33.6407, lon: -84.4277, timeZone: "America/New_York" },
   BOS: { code: "BOS", name: "Boston Logan International", city: "Boston", lat: 42.3656, lon: -71.0096, timeZone: "America/New_York" },
@@ -114,10 +125,14 @@ function mapFlightAwareFlight(flight, requestedDate) {
   const flightNumber = flight.operator_iata && flight.flight_number
     ? `${flight.operator_iata} ${flight.flight_number}`
     : flight.ident_iata ?? flight.ident ?? `${flight.operator_iata ?? ""} ${flight.flight_number ?? ""}`.trim();
+  const airlineCode = flight.operator_iata ?? flightNumber.match(/^([A-Z0-9]{2})/)?.[1] ?? "";
+  const brand = airlineBrands[airlineCode];
 
   return {
     id: flight.fa_flight_id,
-    airline: flight.operator ?? flight.operator_iata ?? "FlightAware",
+    airline: flight.operator ?? brand?.name ?? flight.operator_iata ?? "FlightAware",
+    airlineCode,
+    airlineLogoUrl: brand?.logoUrl,
     flightNumber,
     date: requestedDate,
     origin,
@@ -275,6 +290,8 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
   return {
     id: `web-${ident}-${date}`,
     airline: airlineNameFromCode(airline),
+    airlineCode: airline,
+    airlineLogoUrl: airlineLogoFor(airline),
     flightNumber: `${airline} ${flightNumber}`,
     date,
     origin,
@@ -335,6 +352,8 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
   return {
     id: `flightstats-${ident}-${date}`,
     airline: airlineNameFromCode(airline),
+    airlineCode: airline,
+    airlineLogoUrl: airlineLogoFor(airline),
     flightNumber: `${airline} ${flightNumber}`,
     date,
     origin,
@@ -436,16 +455,11 @@ function wallTimeToUtcIso(date, time, timeZone) {
 }
 
 function airlineNameFromCode(code) {
-  return {
-    AA: "American Airlines",
-    AS: "Alaska Airlines",
-    B6: "JetBlue",
-    DL: "Delta Air Lines",
-    F9: "Frontier Airlines",
-    NK: "Spirit Airlines",
-    UA: "United Airlines",
-    WN: "Southwest Airlines",
-  }[code] ?? code;
+  return airlineBrands[code]?.name ?? code;
+}
+
+function airlineLogoFor(code) {
+  return airlineBrands[code]?.logoUrl ?? "";
 }
 
 app.use(express.static(path.join(__dirname, "dist")));

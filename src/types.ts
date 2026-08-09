@@ -12,6 +12,8 @@ export type Airport = {
 export type FlightLeg = {
   id: string;
   airline: string;
+  airlineCode: string;
+  airlineLogoUrl?: string;
   flightNumber: string;
   date: string;
   origin: Airport;

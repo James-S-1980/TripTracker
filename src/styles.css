@@ -123,7 +123,7 @@ h1 {
   color: #17202a;
   display: grid;
   gap: 2px;
-  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-columns: 34px 42px minmax(0, 1fr);
   justify-content: start;
   min-height: 38px;
   padding: 8px;
@@ -144,6 +144,36 @@ h1 {
 
 .suggestions.compact button {
   grid-template-columns: 70px minmax(0, 1fr);
+}
+
+.airline-logo {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  display: inline-flex;
+  height: 56px;
+  justify-content: center;
+  overflow: hidden;
+  width: 56px;
+}
+
+.airline-logo.small {
+  border-radius: 6px;
+  height: 30px;
+  width: 30px;
+}
+
+.airline-logo img {
+  display: block;
+  height: 72%;
+  object-fit: contain;
+  width: 72%;
+}
+
+.airline-logo strong {
+  color: #0f766e;
+  font-size: 0.82rem;
 }
 
 label {
@@ -310,15 +340,22 @@ dt,
 }
 
 .tracked-flight > button:first-child {
+  align-items: center;
   background: transparent;
   border-radius: 0;
   color: #17202a;
-  display: grid;
-  gap: 2px;
+  display: flex;
+  gap: 10px;
   justify-content: start;
   min-height: 54px;
   padding: 10px 12px 10px 16px;
   text-align: left;
+}
+
+.tracked-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 
 .delete-flight {
@@ -351,6 +388,17 @@ dt,
   align-items: center;
   display: flex;
   justify-content: space-between;
+}
+
+.airline-title {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.airline-title > div {
+  min-width: 0;
 }
 
 .flight-header h2 {

@@ -1,6 +1,6 @@
 import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { airlineMatches } from "./airlines";
+import { airlineLogoFor, airlineMatches } from "./airlines";
 import { lookupFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { FlightLeg, WeatherSnapshot } from "./types";
@@ -169,6 +169,7 @@ export function App() {
                   <div className="suggestions">
                     {airlineSuggestions.map((match) => (
                       <button type="button" key={match.code} onClick={() => setAirline(match.name)}>
+                        <AirlineLogo code={match.code} logoUrl={match.logoUrl} size="small" />
                         <strong>{match.code}</strong>
                         <span>{match.name}</span>
                       </button>
@@ -241,8 +242,11 @@ export function App() {
             {flights.map((flight) => (
               <div className={`tracked-flight ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
                 <button onClick={() => setActiveId(flight.id)} type="button">
-                  <strong>{flight.flightNumber}</strong>
-                  <span>{flight.origin.code} to {flight.destination.code}</span>
+                  <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
+                  <span className="tracked-copy">
+                    <strong>{flight.flightNumber}</strong>
+                    <span>{flight.origin.code} to {flight.destination.code}</span>
+                  </span>
                 </button>
                 <button
                   aria-label={`Delete ${flight.flightNumber}`}
@@ -264,9 +268,15 @@ export function App() {
           {activeFlight ? (
             <>
               <div className="flight-header">
-                <div>
-                  <p>{activeFlight.airline}</p>
-                  <h2>{activeFlight.flightNumber}</h2>
+                <div className="airline-title">
+                  <AirlineLogo
+                    code={activeFlight.airlineCode ?? splitFlightDesignator(activeFlight.flightNumber)[0]}
+                    logoUrl={activeFlight.airlineLogoUrl}
+                  />
+                  <div>
+                    <p>{activeFlight.airline}</p>
+                    <h2>{activeFlight.flightNumber}</h2>
+                  </div>
                 </div>
                 <button className="icon-button" onClick={refreshActiveFlight} disabled={isLoading} aria-label="Refresh flight">
                   <RefreshCw size={18} />
@@ -344,6 +354,21 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUrl?: string; size?: "default" | "small" }) {
+  const [failed, setFailed] = useState(false);
+  const resolvedLogo = logoUrl || airlineLogoFor(code);
+
+  return (
+    <span className={`airline-logo ${size}`}>
+      {resolvedLogo && !failed ? (
+        <img alt={`${code} logo`} src={resolvedLogo} onError={() => setFailed(true)} />
+      ) : (
+        <strong>{code.slice(0, 2).toUpperCase()}</strong>
+      )}
+    </span>
   );
 }
 
