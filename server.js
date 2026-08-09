@@ -18,6 +18,10 @@ const airlineIcaoByIata = {
   WN: "SWA",
 };
 
+const airlineIataByIcao = Object.fromEntries(
+  Object.entries(airlineIcaoByIata).map(([iata, icao]) => [icao, iata]),
+);
+
 const airlineBrands = {
   AA: { name: "American Airlines", logoUrl: "https://logo.clearbit.com/aa.com" },
   AS: { name: "Alaska Airlines", logoUrl: "https://logo.clearbit.com/alaskaair.com" },
@@ -161,7 +165,8 @@ function chooseFlight(flights, requestedDate) {
 }
 
 app.get("/api/flights/lookup", async (request, response) => {
-  const airline = String(request.query.airline ?? "").toUpperCase();
+  const requestedAirline = String(request.query.airline ?? "").toUpperCase();
+  const airline = normalizeAirlineCode(requestedAirline);
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
   const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
@@ -190,6 +195,10 @@ app.get("/api/flights/lookup", async (request, response) => {
     detail: errors.join(" "),
   });
 });
+
+function normalizeAirlineCode(code) {
+  return airlineIataByIcao[code] ?? code;
+}
 
 async function lookupFlightAware(ident, date) {
   const apiKey = process.env.FLIGHTAWARE_AEROAPI_KEY;
@@ -338,9 +347,11 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
   const status = findStatus(text);
   const departureTimeText =
     text.match(/Flight Departure Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
+    text.match(/Flight Departure Times.*?Estimated\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Departure Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const arrivalTimeText =
     text.match(/Flight Arrival Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
+    text.match(/Flight Arrival Times.*?Estimated\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const gates = [...text.matchAll(/Terminal\s+([A-Z0-9]+)\s+Gate\s+([A-Z0-9]+)/gi)];
   const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
@@ -348,6 +359,9 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
   if (!departureTimeText || !arrivalTimeText) {
     throw new Error("FlightStats page did not expose usable departure and arrival times.");
   }
+
+  const departureTime = wallTimeToUtcIso(date, departureTimeText, origin.timeZone);
+  const arrivalTime = wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone);
 
   return {
     id: `flightstats-${ident}-${date}`,
@@ -358,14 +372,14 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     date,
     origin,
     destination,
-    departureTime: wallTimeToUtcIso(date, departureTimeText, origin.timeZone),
-    arrivalTime: wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone),
+    departureTime,
+    arrivalTime,
     boardingGate: gates[0]?.[2] ?? "TBD",
     arrivalGate: gates[1]?.[2] ?? "TBD",
     terminal: gates[0]?.[1] ?? "TBD",
     arrivalTerminal: gates[1]?.[1] ?? "TBD",
     status,
-    progress: status === "Arrived" ? 100 : status === "En Route" ? 70 : 0,
+    progress: progressFromTimes(status, departureTime, arrivalTime),
     altitudeFt: 0,
     groundSpeedMph: 0,
     lastUpdated: new Date().toISOString(),
@@ -382,6 +396,16 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
       },
     ],
   };
+}
+
+function progressFromTimes(status, departureTime, arrivalTime) {
+  if (status === "Arrived") return 100;
+  if (status !== "En Route") return 0;
+  const start = new Date(departureTime).getTime();
+  const end = new Date(arrivalTime).getTime();
+  const now = Date.now();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 70;
+  return Math.max(5, Math.min(98, Math.round(((now - start) / (end - start)) * 100)));
 }
 
 function plainText(html) {
@@ -417,8 +441,8 @@ function findRoute(text) {
 function findStatus(text) {
   if (/\b(cancelled|canceled)\b/i.test(text)) return "Cancelled";
   if (/\b(landed|arrived)\b/i.test(text)) return "Arrived";
-  if (/\bdelayed\b/i.test(text)) return "Delayed";
   if (/\ben route|in air|departed\b/i.test(text)) return "En Route";
+  if (/\bdelayed\b/i.test(text)) return "Delayed";
   if (/\bboarding\b/i.test(text)) return "Boarding";
   return "Scheduled";
 }
