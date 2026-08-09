@@ -14,7 +14,7 @@ export const airlines: Airline[] = [
   { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
   { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
   { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
-  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "https://images.kiwi.com/airlines/64/WN.png" },
+  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "" },
 ];
 
 export function resolveAirline(input: string): Airline {

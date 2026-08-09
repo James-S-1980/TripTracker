@@ -470,7 +470,8 @@ export function App() {
 
 function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUrl?: string; size?: "default" | "small" }) {
   const [failedUrls, setFailedUrls] = useState<string[]>([]);
-  const fallbackLogo = airlineLogoFor(code);
+  const normalizedCode = code.toUpperCase();
+  const fallbackLogo = airlineLogoFor(normalizedCode);
   const logoCandidates = [logoUrl, fallbackLogo]
     .filter((value): value is string => Boolean(value))
     .filter((value, index, list) => list.indexOf(value) === index)
@@ -479,10 +480,16 @@ function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUr
 
   return (
     <span className={`airline-logo ${size}`}>
-      {resolvedLogo ? (
+      {normalizedCode === "WN" || normalizedCode === "SWA" ? (
+        <span className="southwest-logo" aria-label="Southwest Airlines logo">
+          <i />
+          <b />
+          <em />
+        </span>
+      ) : resolvedLogo ? (
         <img alt={`${code} logo`} src={resolvedLogo} onError={() => setFailedUrls((current) => [...current, resolvedLogo])} />
       ) : (
-        <strong>{code.slice(0, 2).toUpperCase()}</strong>
+        <strong>{normalizedCode.slice(0, 2)}</strong>
       )}
     </span>
   );

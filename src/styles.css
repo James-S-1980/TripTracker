@@ -240,6 +240,99 @@ h1 {
   font-size: 0.82rem;
 }
 
+.southwest-logo {
+  display: block;
+  height: 30px;
+  position: relative;
+  transform: rotate(-12deg);
+  width: 34px;
+}
+
+.southwest-logo::before,
+.southwest-logo::after,
+.southwest-logo i,
+.southwest-logo b,
+.southwest-logo em {
+  content: "";
+  display: block;
+  position: absolute;
+}
+
+.southwest-logo::before {
+  background: #304cb2;
+  border-radius: 17px 17px 7px 7px;
+  inset: 0;
+  transform: rotate(45deg);
+}
+
+.southwest-logo::after {
+  background: #ffffff;
+  border-radius: 10px;
+  height: 24px;
+  left: 5px;
+  top: 3px;
+  transform: rotate(45deg);
+  width: 24px;
+}
+
+.southwest-logo i,
+.southwest-logo b,
+.southwest-logo em {
+  border-radius: 6px;
+  height: 8px;
+  left: 8px;
+  transform: rotate(45deg);
+  width: 18px;
+  z-index: 1;
+}
+
+.southwest-logo i {
+  background: #304cb2;
+  top: 5px;
+}
+
+.southwest-logo b {
+  background: #e73535;
+  top: 11px;
+}
+
+.southwest-logo em {
+  background: #f8c33a;
+  top: 17px;
+}
+
+.airline-logo.small .southwest-logo {
+  height: 22px;
+  width: 25px;
+}
+
+.airline-logo.small .southwest-logo::after {
+  height: 18px;
+  left: 4px;
+  top: 2px;
+  width: 18px;
+}
+
+.airline-logo.small .southwest-logo i,
+.airline-logo.small .southwest-logo b,
+.airline-logo.small .southwest-logo em {
+  height: 6px;
+  left: 6px;
+  width: 13px;
+}
+
+.airline-logo.small .southwest-logo i {
+  top: 4px;
+}
+
+.airline-logo.small .southwest-logo b {
+  top: 9px;
+}
+
+.airline-logo.small .southwest-logo em {
+  top: 14px;
+}
+
 label {
   color: #405a52;
   display: grid;

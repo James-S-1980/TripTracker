@@ -38,7 +38,7 @@ const airlineBrands = {
   F9: { name: "Frontier Airlines", logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
   NK: { name: "Spirit Airlines", logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
   UA: { name: "United Airlines", logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
-  WN: { name: "Southwest Airlines", logoUrl: "https://images.kiwi.com/airlines/64/WN.png" },
+  WN: { name: "Southwest Airlines", logoUrl: "" },
 };
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
