@@ -149,7 +149,7 @@ function chooseFlight(flights, requestedDate) {
   )) ?? flights[0];
 }
 
-app.get("/api/flights/lookup", async (request, response) => {
+app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, response) => {
   const requestedAirline = String(request.query.airline ?? "").toUpperCase();
   const airline = normalizeAirlineCode(requestedAirline);
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
@@ -502,7 +502,12 @@ function airlineLogoFor(code) {
 }
 
 app.use(express.static(path.join(__dirname, "dist")));
-app.use((_request, response) => {
+app.use("/trip", express.static(path.join(__dirname, "dist")));
+app.use((request, response) => {
+  if (request.path.startsWith("/trip")) {
+    response.sendFile(path.join(__dirname, "dist", "index.html"));
+    return;
+  }
   response.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 

@@ -4,9 +4,10 @@ import type { FlightLeg } from "./types";
 export async function lookupFlight(airlineInput: string, flightNumber: string, date: string): Promise<FlightLeg> {
   const airline = resolveAirline(airlineInput);
   const params = new URLSearchParams({ airline: airline.code, flightNumber, date });
+  const apiBase = window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
   let response: Response;
   try {
-    response = await fetch(`/api/flights/lookup?${params.toString()}`);
+    response = await fetch(`${apiBase}/flights/lookup?${params.toString()}`);
   } catch {
     throw new Error("Flight lookup API is unavailable. Start the TripTracker server and try again.");
   }
