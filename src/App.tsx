@@ -1,4 +1,4 @@
-import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, RefreshCw, Search, Timer } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { airlineMatches } from "./airlines";
 import { lookupFlight } from "./flightProvider";
@@ -9,6 +9,15 @@ const storageKey = "triptracker:flights";
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function formatZonedTime(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+    timeZoneName: "short",
+  }).format(new Date(value));
 }
 
 function timeAgo(value: string): string {
@@ -97,6 +106,16 @@ export function App() {
     setFlights((current) => current.map((item) => item.id === flight.id ? flight : item));
     setActiveId(flight.id);
     setIsLoading(false);
+  }
+
+  function deleteFlight(flightId: string) {
+    setFlights((current) => {
+      const next = current.filter((flight) => flight.id !== flightId);
+      if (flightId === activeFlight?.id) {
+        setActiveId(next[0]?.id ?? null);
+      }
+      return next;
+    });
   }
 
   return (
@@ -198,15 +217,23 @@ export function App() {
           </div>
           <div className="tracked-list">
             {flights.map((flight) => (
-              <button
-                className={flight.id === activeFlight?.id ? "active" : ""}
-                key={flight.id}
-                onClick={() => setActiveId(flight.id)}
-                type="button"
-              >
-                <strong>{flight.flightNumber}</strong>
-                <span>{flight.origin.code} to {flight.destination.code}</span>
-              </button>
+              <div className={`tracked-flight ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
+                <button onClick={() => setActiveId(flight.id)} type="button">
+                  <strong>{flight.flightNumber}</strong>
+                  <span>{flight.origin.code} to {flight.destination.code}</span>
+                </button>
+                <button
+                  aria-label={`Delete ${flight.flightNumber}`}
+                  className="delete-flight"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    deleteFlight(flight.id);
+                  }}
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ))}
           </div>
         </aside>
@@ -247,8 +274,18 @@ export function App() {
               <div className="summary-strip">
                 <Metric icon={<Plane />} label="Status" value={activeFlight.status} tone={activeFlight.status === "Delayed" ? "danger" : "good"} />
                 <Metric icon={<MapPin />} label="Boarding" value={`T${activeFlight.terminal} ${activeFlight.boardingGate}`} tone="warn" />
-                <Metric icon={<Timer />} label="Depart" value={formatTime(activeFlight.departureTime)} />
-                <Metric icon={<CalendarDays />} label={formatDate(activeFlight.date)} value={formatTime(activeFlight.arrivalTime)} />
+                <TimeMetric
+                  icon={<Timer />}
+                  label={`Depart ${activeFlight.origin.code}`}
+                  value={formatZonedTime(activeFlight.departureTime, activeFlight.origin.timeZone ?? "America/New_York")}
+                  subValue={`Your time: ${formatZonedTime(activeFlight.departureTime, "America/New_York")}`}
+                />
+                <TimeMetric
+                  icon={<CalendarDays />}
+                  label={`Arrive ${activeFlight.destination.code}`}
+                  value={formatZonedTime(activeFlight.arrivalTime, activeFlight.destination.timeZone ?? "America/New_York")}
+                  subValue={`${formatDate(activeFlight.date)} / Your time: ${formatZonedTime(activeFlight.arrivalTime, "America/New_York")}`}
+                />
               </div>
 
               <FlightMap flight={activeFlight} />
@@ -283,10 +320,6 @@ export function App() {
   );
 }
 
-function priorityWeight(priority: string): number {
-  return priority === "critical" ? 3 : priority === "high" ? 2 : 1;
-}
-
 function Metric({ icon, label, value, tone = "neutral" }: { icon: React.ReactNode; label: string; value: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
   return (
     <div className={`metric ${tone}`}>
@@ -294,6 +327,19 @@ function Metric({ icon, label, value, tone = "neutral" }: { icon: React.ReactNod
       <div>
         <small>{label}</small>
         <strong>{value}</strong>
+      </div>
+    </div>
+  );
+}
+
+function TimeMetric({ icon, label, value, subValue }: { icon: React.ReactNode; label: string; value: string; subValue: string }) {
+  return (
+    <div className="metric time-metric">
+      <span>{icon}</span>
+      <div>
+        <small>{label}</small>
+        <strong>{value}</strong>
+        <em>{subValue}</em>
       </div>
     </div>
   );

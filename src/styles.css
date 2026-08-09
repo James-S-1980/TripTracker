@@ -282,21 +282,46 @@ dt,
   margin-top: 10px;
 }
 
-.tracked-list button {
+.tracked-flight {
+  align-items: stretch;
   background: #ffffff;
   border: 1px solid #d9e4df;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  overflow: hidden;
+}
+
+.tracked-flight.active {
+  border-color: #0f766e;
+  box-shadow: inset 4px 0 0 #0f766e;
+}
+
+.tracked-flight > button:first-child {
+  background: transparent;
+  border-radius: 0;
   color: #17202a;
   display: grid;
   gap: 2px;
   justify-content: start;
   min-height: 54px;
-  padding: 10px 12px;
+  padding: 10px 12px 10px 16px;
   text-align: left;
 }
 
-.tracked-list button.active {
-  border-color: #0f766e;
-  box-shadow: inset 4px 0 0 #0f766e;
+.delete-flight {
+  align-items: center;
+  background: transparent;
+  border-left: 1px solid #d9e4df;
+  border-radius: 0;
+  color: #8a4238;
+  justify-content: center;
+  min-height: 54px;
+  padding: 0;
+}
+
+.delete-flight:hover {
+  background: #fff0ed;
 }
 
 .tracked-list span {
@@ -391,6 +416,19 @@ dt,
 .metric strong {
   display: block;
   font-size: 1.25rem;
+}
+
+.time-metric strong {
+  font-size: 1.05rem;
+}
+
+.time-metric em {
+  color: #60756f;
+  display: block;
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 800;
+  margin-top: 3px;
 }
 
 .metric.warn span {

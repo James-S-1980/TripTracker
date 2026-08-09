@@ -6,6 +6,7 @@ export type Airport = {
   city: string;
   lat: number;
   lon: number;
+  timeZone: string;
 };
 
 export type FlightLeg = {
