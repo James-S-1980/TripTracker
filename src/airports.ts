@@ -3,7 +3,9 @@ import type { Airport } from "./types";
 export const airports: Airport[] = [
   { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", lat: 33.6407, lon: -84.4277, timeZone: "America/New_York" },
   { code: "BOS", name: "Boston Logan International", city: "Boston", lat: 42.3656, lon: -71.0096, timeZone: "America/New_York" },
+  { code: "BWI", name: "Baltimore/Washington International Thurgood Marshall Airport", city: "Baltimore", lat: 39.1774, lon: -76.6684, timeZone: "America/New_York" },
   { code: "CLT", name: "Charlotte Douglas International", city: "Charlotte", lat: 35.214, lon: -80.9431, timeZone: "America/New_York" },
+  { code: "CUN", name: "Cancun International Airport", city: "Cancun", lat: 21.0365, lon: -86.8771, timeZone: "America/Cancun" },
   { code: "DCA", name: "Ronald Reagan Washington National", city: "Washington", lat: 38.8512, lon: -77.0402, timeZone: "America/New_York" },
   { code: "DEN", name: "Denver International", city: "Denver", lat: 39.8561, lon: -104.6737, timeZone: "America/Denver" },
   { code: "DFW", name: "Dallas Fort Worth International", city: "Dallas-Fort Worth", lat: 32.8998, lon: -97.0403, timeZone: "America/Chicago" },

@@ -36,7 +36,9 @@ const airlineBrands = {
 const airportCatalog = {
   ATL: { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", lat: 33.6407, lon: -84.4277, timeZone: "America/New_York" },
   BOS: { code: "BOS", name: "Boston Logan International", city: "Boston", lat: 42.3656, lon: -71.0096, timeZone: "America/New_York" },
+  BWI: { code: "BWI", name: "Baltimore/Washington International Thurgood Marshall Airport", city: "Baltimore", lat: 39.1774, lon: -76.6684, timeZone: "America/New_York" },
   CLT: { code: "CLT", name: "Charlotte Douglas International", city: "Charlotte", lat: 35.214, lon: -80.9431, timeZone: "America/New_York" },
+  CUN: { code: "CUN", name: "Cancun International Airport", city: "Cancun", lat: 21.0365, lon: -86.8771, timeZone: "America/Cancun" },
   DCA: { code: "DCA", name: "Ronald Reagan Washington National", city: "Washington", lat: 38.8512, lon: -77.0402, timeZone: "America/New_York" },
   DEN: { code: "DEN", name: "Denver International", city: "Denver", lat: 39.8561, lon: -104.6737, timeZone: "America/Denver" },
   DFW: { code: "DFW", name: "Dallas Fort Worth International", city: "Dallas-Fort Worth", lat: 32.8998, lon: -97.0403, timeZone: "America/Chicago" },
@@ -291,7 +293,7 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
 
   const status = findStatus(text);
   const times = findFlightTimes(text, date, origin.timeZone, destination.timeZone);
-  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9/]+)/gi)];
   const updated = text.match(/Updated\s+([^.;]+?)(?:\s+·|\s+-|\s+Cirium|\s*$)/i)?.[1]?.trim();
 
   return {
@@ -331,7 +333,7 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
 
 function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUrl) {
   const text = plainText(html);
-  const route = findRoute(text);
+  const route = findFlightStatsRoute(text, airline, flightNumber) ?? findRoute(text);
   if (!route) {
     throw new Error("FlightStats page did not expose a parseable route.");
   }
@@ -348,7 +350,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     text.match(/Flight Arrival Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Estimated\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
-  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9/]+)/gi)];
   const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
 
   if (!departureTimeText || !arrivalTimeText) {
@@ -426,6 +428,13 @@ function findRoute(text) {
   const explicit = text.match(/\b([A-Z]{3})\s*(?:to|→|-)\s*([A-Z]{3})\b/);
   if (explicit) return { origin: explicit[1], destination: explicit[2] };
 
+  const airportBlocks = [...text.matchAll(/\b([A-Z]{3})\s+[^,]+,\s+[A-Z]{2,},\s+(?:US|MX|CA)\s+[^.]*?\bAirport\b/gi)]
+    .map((match) => match[1].toUpperCase());
+  const uniqueAirportBlocks = [...new Set(airportBlocks)];
+  if (uniqueAirportBlocks.length >= 2) {
+    return { origin: uniqueAirportBlocks[0], destination: uniqueAirportBlocks[1] };
+  }
+
   const codes = [...text.matchAll(/\b([A-Z]{3})\b/g)]
     .map((match) => match[1])
     .filter((code) => airportCatalog[code]);
@@ -433,15 +442,28 @@ function findRoute(text) {
   return uniqueCodes.length >= 2 ? { origin: uniqueCodes[0], destination: uniqueCodes[1] } : null;
 }
 
+function findFlightStatsRoute(text, airline, flightNumber) {
+  const marker = `Flight Status ${airline} ${flightNumber}`;
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  const slice = text.slice(markerIndex, markerIndex + 320);
+  const airlineIcao = airlineIcaoByIata[airline];
+  const codes = [...slice.matchAll(/\b([A-Z]{3})\b/g)]
+    .map((match) => match[1])
+    .filter((code) => code !== airline && code !== airlineIcao && code !== "N/A");
+  return codes.length >= 2 ? { origin: codes[0], destination: codes[1] } : null;
+}
+
 function airportForRouteCode(code, text) {
   const known = airportCatalog[code];
   if (known) return known;
 
-  const airportPattern = new RegExp(`${code}\\s+([^,]+),\\s*([A-Z]{2}),\\s*US\\s+([^]*? Airport)`, "i");
+  const airportPattern = new RegExp(`${code}\\s+([^,]+),\\s*([A-Z]{2,}),\\s*(US|MX|CA)\\s+([^]*? Airport)`, "i");
   const match = text.match(airportPattern);
   return {
     code,
-    name: match?.[3]?.trim() ?? `${code} Airport`,
+    name: match?.[4]?.trim() ?? `${code} Airport`,
     city: match?.[1]?.trim() ?? code,
     lat: 0,
     lon: 0,
