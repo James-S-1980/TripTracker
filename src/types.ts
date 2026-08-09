@@ -28,6 +28,7 @@ export type FlightLeg = {
   groundSpeedMph: number;
   lastUpdated: string;
   dataSource: string;
+  sourceUrl?: string;
   alerts: FlightAlert[];
 };
 

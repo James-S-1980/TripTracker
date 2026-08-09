@@ -146,46 +146,307 @@ function chooseFlight(flights, requestedDate) {
 }
 
 app.get("/api/flights/lookup", async (request, response) => {
-  const apiKey = process.env.FLIGHTAWARE_AEROAPI_KEY;
-  if (!apiKey) {
-    response.status(503).json({ error: "FLIGHTAWARE_AEROAPI_KEY is not configured." });
-    return;
-  }
-
   const airline = String(request.query.airline ?? "").toUpperCase();
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
   const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
+  const errors = [];
+
+  const flightAwareFlight = await lookupFlightAware(ident, date).catch((error) => {
+    errors.push(error instanceof Error ? error.message : "FlightAware lookup failed.");
+    return null;
+  });
+  if (flightAwareFlight) {
+    response.json(flightAwareFlight);
+    return;
+  }
+
+  const webFlight = await lookupWebFlight(ident, airline, flightNumber, date).catch((error) => {
+    errors.push(error instanceof Error ? error.message : "Web search lookup failed.");
+    return null;
+  });
+  if (webFlight) {
+    response.json(webFlight);
+    return;
+  }
+
+  response.status(404).json({
+    error: `No live flight data found for ${ident} on ${date}.`,
+    detail: errors.join(" "),
+  });
+});
+
+async function lookupFlightAware(ident, date) {
+  const apiKey = process.env.FLIGHTAWARE_AEROAPI_KEY;
+  if (!apiKey) {
+    throw new Error("FlightAware API key is not configured.");
+  }
+
   const params = new URLSearchParams({
     ident_type: "designator",
     start: addDays(date, -1),
     end: addDays(date, 2),
     max_pages: "1",
   });
+  const flightAwareResponse = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(ident)}?${params.toString()}`, {
+    headers: { "x-apikey": apiKey },
+  });
+
+  if (!flightAwareResponse.ok) {
+    throw new Error(`FlightAware returned ${flightAwareResponse.status}.`);
+  }
+
+  const payload = await flightAwareResponse.json();
+  const flight = chooseFlight(payload.flights ?? [], date);
+  return flight ? mapFlightAwareFlight(flight, date) : null;
+}
+
+async function lookupWebFlight(ident, airline, flightNumber, date) {
+  const query = `${ident} ${airline} ${flightNumber} flight status ${date}`;
+  const url = `https://www.google.com/search?${new URLSearchParams({ q: query, hl: "en" }).toString()}`;
+  const errors = [];
 
   try {
-    const flightAwareResponse = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(ident)}?${params.toString()}`, {
-      headers: { "x-apikey": apiKey },
-    });
-
-    if (!flightAwareResponse.ok) {
-      const detail = await flightAwareResponse.text();
-      response.status(flightAwareResponse.status).json({ error: "FlightAware lookup failed.", detail });
-      return;
+    const searchResponse = await fetch(url, { headers: browserHeaders() });
+    if (!searchResponse.ok) {
+      throw new Error(`Google flight search returned ${searchResponse.status}.`);
     }
-
-    const payload = await flightAwareResponse.json();
-    const flight = chooseFlight(payload.flights ?? [], date);
-    if (!flight) {
-      response.status(404).json({ error: `No FlightAware match found for ${ident} on ${date}.` });
-      return;
-    }
-
-    response.json(mapFlightAwareFlight(flight, date));
+    const html = await searchResponse.text();
+    return parseGoogleFlightCard(html, ident, airline, flightNumber, date, url);
   } catch (error) {
-    response.status(502).json({ error: error instanceof Error ? error.message : "FlightAware request failed." });
+    errors.push(error instanceof Error ? error.message : "Google flight card parse failed.");
   }
-});
+
+  try {
+    const flightStatsUrl = flightStatsUrlFor(airline, flightNumber, date);
+    const flightStatsResponse = await fetch(flightStatsUrl, { headers: browserHeaders() });
+    if (!flightStatsResponse.ok) {
+      throw new Error(`FlightStats returned ${flightStatsResponse.status}.`);
+    }
+    const html = await flightStatsResponse.text();
+    return parseFlightStatsPage(html, ident, airline, flightNumber, date, flightStatsUrl);
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : "FlightStats parse failed.");
+  }
+
+  throw new Error(errors.join(" "));
+}
+
+function browserHeaders() {
+  return {
+    "accept-language": "en-US,en;q=0.9",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+  };
+}
+
+function flightStatsUrlFor(airline, flightNumber, date) {
+  const [year, month, day] = date.split("-");
+  return `https://www.flightstats.com/v2/flight-tracker/${airline}/${flightNumber}?${new URLSearchParams({
+    year,
+    month: String(Number(month)),
+    date: String(Number(day)),
+  }).toString()}`;
+}
+
+function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceUrl) {
+  const text = decodeHtml(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const route = findRoute(text);
+  if (!route) {
+    throw new Error("Web search did not expose a parseable flight-card route.");
+  }
+
+  const origin = airportCatalog[route.origin];
+  const destination = airportCatalog[route.destination];
+  if (!origin || !destination) {
+    throw new Error(`Web search route ${route.origin}-${route.destination} uses airports not in the local catalog yet.`);
+  }
+
+  const status = findStatus(text);
+  const times = findFlightTimes(text, date, origin.timeZone, destination.timeZone);
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const updated = text.match(/Updated\s+([^.;]+?)(?:\s+·|\s+-|\s+Cirium|\s*$)/i)?.[1]?.trim();
+
+  return {
+    id: `web-${ident}-${date}`,
+    airline: airlineNameFromCode(airline),
+    flightNumber: `${airline} ${flightNumber}`,
+    date,
+    origin,
+    destination,
+    departureTime: times.departureTime,
+    arrivalTime: times.arrivalTime,
+    boardingGate: gates[0]?.[2] ?? "TBD",
+    arrivalGate: gates[1]?.[2] ?? "TBD",
+    terminal: gates[0]?.[1] ?? "TBD",
+    arrivalTerminal: gates[1]?.[1] ?? "TBD",
+    status,
+    progress: status === "Arrived" ? 100 : status === "En Route" ? 70 : 0,
+    altitudeFt: 0,
+    groundSpeedMph: 0,
+    lastUpdated: new Date().toISOString(),
+    dataSource: `Web search flight card${updated ? `, updated ${updated}` : ""}`,
+    sourceUrl,
+    alerts: [
+      {
+        id: `web-${ident}-${date}-status`,
+        type: "status",
+        priority: status === "Delayed" || status === "Cancelled" ? "critical" : "high",
+        title: status,
+        message: `Parsed ${route.origin} to ${route.destination} from public web-search flight results.`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUrl) {
+  const text = plainText(html);
+  const route = findRoute(text);
+  if (!route) {
+    throw new Error("FlightStats page did not expose a parseable route.");
+  }
+
+  const origin = airportCatalog[route.origin];
+  const destination = airportCatalog[route.destination];
+  if (!origin || !destination) {
+    throw new Error(`FlightStats route ${route.origin}-${route.destination} uses airports not in the local catalog yet.`);
+  }
+
+  const status = findStatus(text);
+  const departureTimeText =
+    text.match(/Flight Departure Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
+    text.match(/Flight Departure Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
+  const arrivalTimeText =
+    text.match(/Flight Arrival Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
+    text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
+
+  if (!departureTimeText || !arrivalTimeText) {
+    throw new Error("FlightStats page did not expose usable departure and arrival times.");
+  }
+
+  return {
+    id: `flightstats-${ident}-${date}`,
+    airline: airlineNameFromCode(airline),
+    flightNumber: `${airline} ${flightNumber}`,
+    date,
+    origin,
+    destination,
+    departureTime: wallTimeToUtcIso(date, departureTimeText, origin.timeZone),
+    arrivalTime: wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone),
+    boardingGate: gates[0]?.[2] ?? "TBD",
+    arrivalGate: gates[1]?.[2] ?? "TBD",
+    terminal: gates[0]?.[1] ?? "TBD",
+    arrivalTerminal: gates[1]?.[1] ?? "TBD",
+    status,
+    progress: status === "Arrived" ? 100 : status === "En Route" ? 70 : 0,
+    altitudeFt: 0,
+    groundSpeedMph: 0,
+    lastUpdated: new Date().toISOString(),
+    dataSource: "FlightStats public page, powered by Cirium",
+    sourceUrl,
+    alerts: [
+      {
+        id: `flightstats-${ident}-${date}-status`,
+        type: "status",
+        priority: status === "Delayed" || status === "Cancelled" ? "critical" : "high",
+        title: status,
+        message: `Parsed ${route.origin} to ${route.destination}${flightTime ? `, flight time ${flightTime}` : ""}.`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+function plainText(html) {
+  return decodeHtml(html)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function decodeHtml(value) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function findRoute(text) {
+  const explicit = text.match(/\b([A-Z]{3})\s*(?:to|→|-)\s*([A-Z]{3})\b/);
+  if (explicit) return { origin: explicit[1], destination: explicit[2] };
+
+  const codes = [...text.matchAll(/\b([A-Z]{3})\b/g)]
+    .map((match) => match[1])
+    .filter((code) => airportCatalog[code]);
+  const uniqueCodes = [...new Set(codes)];
+  return uniqueCodes.length >= 2 ? { origin: uniqueCodes[0], destination: uniqueCodes[1] } : null;
+}
+
+function findStatus(text) {
+  if (/\b(cancelled|canceled)\b/i.test(text)) return "Cancelled";
+  if (/\b(landed|arrived)\b/i.test(text)) return "Arrived";
+  if (/\bdelayed\b/i.test(text)) return "Delayed";
+  if (/\ben route|in air|departed\b/i.test(text)) return "En Route";
+  if (/\bboarding\b/i.test(text)) return "Boarding";
+  return "Scheduled";
+}
+
+function findFlightTimes(text, date, originTimeZone, destinationTimeZone) {
+  const departed = text.match(/\b(?:Departed|Departure)\s+(\d{1,2}:\d{2}\s*[AP]M)\b/i)?.[1];
+  const landed = text.match(/\b(?:Landed|Arrived|Arrival)\s+(\d{1,2}:\d{2}\s*[AP]M)\b/i)?.[1];
+  const genericTimes = [...text.matchAll(/\b(\d{1,2}:\d{2}\s*[AP]M)\b/gi)].map((match) => match[1]);
+
+  return {
+    departureTime: wallTimeToUtcIso(date, departed ?? genericTimes[0] ?? "12:00 PM", originTimeZone),
+    arrivalTime: wallTimeToUtcIso(date, landed ?? genericTimes[1] ?? genericTimes[0] ?? "12:00 PM", destinationTimeZone),
+  };
+}
+
+function wallTimeToUtcIso(date, time, timeZone) {
+  const [, hourText, minuteText, suffix] = time.match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i) ?? [];
+  let hour = Number(hourText ?? 12);
+  const minute = Number(minuteText ?? 0);
+  if (suffix?.toUpperCase() === "PM" && hour !== 12) hour += 12;
+  if (suffix?.toUpperCase() === "AM" && hour === 12) hour = 0;
+
+  const candidate = new Date(`${date}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00Z`);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+    hour: "2-digit",
+  });
+  const offsetName = formatter.formatToParts(candidate).find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const offset = offsetName.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!offset) return candidate.toISOString();
+  const offsetMinutes = (Number(offset[2]) * 60 + Number(offset[3] ?? 0)) * (offset[1] === "+" ? 1 : -1);
+  return new Date(candidate.getTime() - offsetMinutes * 60000).toISOString();
+}
+
+function airlineNameFromCode(code) {
+  return {
+    AA: "American Airlines",
+    AS: "Alaska Airlines",
+    B6: "JetBlue",
+    DL: "Delta Air Lines",
+    F9: "Frontier Airlines",
+    NK: "Spirit Airlines",
+    UA: "United Airlines",
+    WN: "Southwest Airlines",
+  }[code] ?? code;
+}
 
 app.use(express.static(path.join(__dirname, "dist")));
 app.use((_request, response) => {

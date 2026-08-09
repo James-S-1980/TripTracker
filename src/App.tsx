@@ -50,6 +50,7 @@ export function App() {
   const [weather, setWeather] = useState<Record<string, WeatherSnapshot>>({});
   const [airlineFocused, setAirlineFocused] = useState(false);
   const [flightFocused, setFlightFocused] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
@@ -100,20 +101,32 @@ export function App() {
   async function addFlight(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsLoading(true);
-    const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date);
-    setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
-    setActiveId(flight.id);
-    setIsLoading(false);
+    setLookupError(null);
+    try {
+      const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date);
+      setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
+      setActiveId(flight.id);
+    } catch (error) {
+      setLookupError(error instanceof Error ? error.message : "No live flight data found.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function refreshActiveFlight() {
     if (!activeFlight) return;
     const [code, number] = splitFlightDesignator(activeFlight.flightNumber);
     setIsLoading(true);
-    const flight = await lookupFlight(code, number, activeFlight.date);
-    setFlights((current) => current.map((item) => item.id === flight.id ? flight : item));
-    setActiveId(flight.id);
-    setIsLoading(false);
+    setLookupError(null);
+    try {
+      const flight = await lookupFlight(code, number, activeFlight.date);
+      setFlights((current) => current.map((item) => item.id === activeFlight.id ? flight : item));
+      setActiveId(flight.id);
+    } catch (error) {
+      setLookupError(error instanceof Error ? error.message : "No live flight data found.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   function deleteFlight(flightId: string) {
@@ -195,6 +208,7 @@ export function App() {
               <Search size={17} />
               {isLoading ? "Checking" : "Track flight"}
             </button>
+            {lookupError && <p className="lookup-error">{lookupError}</p>}
           </form>
 
           <div className="section-heading">
@@ -279,7 +293,8 @@ export function App() {
                 </div>
                 <div className="provider-note">
                   <small>Data source</small>
-                  <strong>{activeFlight.dataSource ?? "Simulated demo provider"}</strong>
+                  <strong>{activeFlight.dataSource}</strong>
+                  {activeFlight.sourceUrl && <a href={activeFlight.sourceUrl} target="_blank" rel="noreferrer">Open source search</a>}
                 </div>
               </section>
 

@@ -21,7 +21,16 @@ npm run build
 npm start
 ```
 
-Open `http://127.0.0.1:8787`. If the key is missing or FlightAware has no match, the app falls back to the demo provider and labels the data source in the flight brief.
+Open `http://127.0.0.1:8787`.
+
+Lookup order:
+
+1. FlightAware AeroAPI, when `FLIGHTAWARE_AEROAPI_KEY` is configured.
+2. Public web fallback:
+   - Google-style flight-card search result when its HTML exposes parseable data.
+   - FlightStats public flight page, powered by Cirium, as the concrete parseable fallback for airline flight status pages.
+
+TripTracker no longer falls back to demo data. If neither live source returns parseable flight information, the app shows a lookup error instead of inventing route, gate, or status values.
 
 ## Build
 
