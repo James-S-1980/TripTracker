@@ -551,7 +551,6 @@ export function App() {
 function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUrl?: string; size?: "default" | "small" }) {
   const [failedUrls, setFailedUrls] = useState<string[]>([]);
   const normalizedCode = code.toUpperCase();
-  const localLogoCode = localAirlineLogoCode(normalizedCode);
   const fallbackLogo = airlineLogoFor(normalizedCode);
   const logoCandidates = [logoUrl, fallbackLogo]
     .filter((value): value is string => Boolean(value))
@@ -561,39 +560,13 @@ function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUr
 
   return (
     <span className={`airline-logo ${size}`}>
-      {localLogoCode === "WN" ? (
-        <span className="airline-mark southwest-logo" aria-label="Southwest Airlines logo">
-          <i />
-          <b />
-          <em />
-        </span>
-      ) : localLogoCode ? (
-        <span className={`airline-mark airline-mark-${localLogoCode.toLowerCase()}`} aria-label={`${localLogoCode} airline logo`}>
-          <b>{localLogoCode}</b>
-        </span>
-      ) : resolvedLogo ? (
+      {resolvedLogo ? (
         <img alt={`${code} logo`} src={resolvedLogo} onError={() => setFailedUrls((current) => [...current, resolvedLogo])} />
       ) : (
         <strong>{normalizedCode.slice(0, 2)}</strong>
       )}
     </span>
   );
-}
-
-function localAirlineLogoCode(code: string): string {
-  const aliases: Record<string, string> = {
-    AAL: "AA",
-    ASA: "AS",
-    JBU: "B6",
-    DAL: "DL",
-    FFT: "F9",
-    NKS: "NK",
-    UAL: "UA",
-    SWA: "WN",
-    SW: "WN",
-  };
-  const normalized = aliases[code] ?? code;
-  return ["AA", "AS", "B6", "DL", "F9", "NK", "UA", "WN"].includes(normalized) ? normalized : "";
 }
 
 function Metric({ icon, label, value, source, tone = "neutral" }: { icon: React.ReactNode; label: string; value: string; source?: string; tone?: "neutral" | "good" | "warn" | "danger" }) {

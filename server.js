@@ -31,14 +31,14 @@ const airlineIataByIcao = Object.fromEntries(
 );
 
 const airlineBrands = {
-  AA: { name: "American Airlines", logoUrl: "" },
-  AS: { name: "Alaska Airlines", logoUrl: "" },
-  B6: { name: "JetBlue", logoUrl: "" },
-  DL: { name: "Delta Air Lines", logoUrl: "" },
-  F9: { name: "Frontier Airlines", logoUrl: "" },
-  NK: { name: "Spirit Airlines", logoUrl: "" },
-  UA: { name: "United Airlines", logoUrl: "" },
-  WN: { name: "Southwest Airlines", logoUrl: "" },
+  AA: { name: "American Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AA.png" },
+  AS: { name: "Alaska Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AS.png" },
+  B6: { name: "JetBlue", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/B6.png" },
+  DL: { name: "Delta Air Lines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/DL.png" },
+  F9: { name: "Frontier Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/F9.png" },
+  NK: { name: "Spirit Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/NK.png" },
+  UA: { name: "United Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/UA.png" },
+  WN: { name: "Southwest Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/WN.png" },
 };
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));

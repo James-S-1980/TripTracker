@@ -7,14 +7,14 @@ export type Airline = {
 };
 
 export const airlines: Airline[] = [
-  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "" },
-  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "" },
-  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "" },
-  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "" },
-  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "" },
-  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "" },
-  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "" },
-  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "" },
+  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AA.png" },
+  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AS.png" },
+  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/B6.png" },
+  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/DL.png" },
+  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/F9.png" },
+  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/NK.png" },
+  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/UA.png" },
+  { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/WN.png" },
 ];
 
 export function resolveAirline(input: string): Airline {
