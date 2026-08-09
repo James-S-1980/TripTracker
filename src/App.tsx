@@ -1,9 +1,11 @@
 import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import L from "leaflet";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
 import { lookupFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { FlightLeg, WeatherSnapshot } from "./types";
+import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
 
@@ -48,7 +50,7 @@ function splitFlightDesignator(value: string): [string, string] {
 
 export function App() {
   const [airline, setAirline] = useState("");
-  const [flightNumber, setFlightNumber] = useState("401");
+  const [flightNumber, setFlightNumber] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [flights, setFlights] = useState<FlightLeg[]>(() => {
     const saved = window.localStorage.getItem(storageKey);
@@ -478,57 +480,114 @@ function WeatherCard({ title, code, weather }: { title: string; code: string; we
 }
 
 function FlightMap({ flight }: { flight: FlightLeg }) {
-  const padding = 95;
-  const minLon = Math.min(flight.origin.lon, flight.destination.lon) - 8;
-  const maxLon = Math.max(flight.origin.lon, flight.destination.lon) + 8;
-  const minLat = Math.min(flight.origin.lat, flight.destination.lat) - 5;
-  const maxLat = Math.max(flight.origin.lat, flight.destination.lat) + 5;
-  const project = (lon: number, lat: number) => ({
-    x: padding + ((lon - minLon) / (maxLon - minLon)) * (900 - padding * 2),
-    y: 285 - ((lat - minLat) / (maxLat - minLat)) * 240,
-  });
-  const origin = project(flight.origin.lon, flight.origin.lat);
-  const destination = project(flight.destination.lon, flight.destination.lat);
-  const controlX = (origin.x + destination.x) / 2;
-  const controlY = Math.min(origin.y, destination.y) - 90;
-  const progress = flight.progress / 100;
-  const planeX = (1 - progress) ** 2 * origin.x + 2 * (1 - progress) * progress * controlX + progress ** 2 * destination.x;
-  const planeY = (1 - progress) ** 2 * origin.y + 2 * (1 - progress) * progress * controlY + progress ** 2 * destination.y;
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const leafletMapRef = useRef<L.Map | null>(null);
+  const routePoints = useMemo(() => {
+    if (flight.track && flight.track.length > 1) {
+      return flight.track.map((point) => [point.lat, point.lon] as L.LatLngTuple);
+    }
+    return greatCirclePoints(
+      [flight.origin.lat, flight.origin.lon],
+      [flight.destination.lat, flight.destination.lon],
+      72,
+    );
+  }, [flight]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    if (!leafletMapRef.current) {
+      leafletMapRef.current = L.map(mapRef.current, {
+        attributionControl: true,
+        scrollWheelZoom: false,
+      });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+        maxZoom: 10,
+      }).addTo(leafletMapRef.current);
+    }
+
+    const map = leafletMapRef.current;
+    map.eachLayer((layer) => {
+      if (!(layer instanceof L.TileLayer)) {
+        layer.remove();
+      }
+    });
+
+    const originPoint: L.LatLngTuple = [flight.origin.lat, flight.origin.lon];
+    const destinationPoint: L.LatLngTuple = [flight.destination.lat, flight.destination.lon];
+    const aircraft = flight.aircraftPosition;
+    const aircraftPoint: L.LatLngTuple | undefined = aircraft ? [aircraft.lat, aircraft.lon] : undefined;
+
+    L.polyline(routePoints, { color: "#0f766e", opacity: 0.82, weight: 4 }).addTo(map);
+    L.circleMarker(originPoint, { color: "#0f766e", fillColor: "#0f766e", fillOpacity: 1, radius: 7 })
+      .bindPopup(`${flight.origin.code} ${flight.origin.city}`)
+      .addTo(map);
+    L.circleMarker(destinationPoint, { color: "#d97706", fillColor: "#d97706", fillOpacity: 1, radius: 7 })
+      .bindPopup(`${flight.destination.code} ${flight.destination.city}`)
+      .addTo(map);
+
+    if (aircraftPoint) {
+      const live = aircraft?.source !== "Estimated from schedule";
+      L.marker(aircraftPoint, {
+        icon: L.divIcon({
+          className: "aircraft-map-marker",
+          html: `<span class="${live ? "live" : "estimated"}">&#9992;</span>`,
+          iconAnchor: [16, 16],
+          iconSize: [32, 32],
+        }),
+      })
+        .bindPopup(`${flight.flightNumber}<br>${aircraft?.source}<br>${aircraft?.altitudeFt.toLocaleString()} ft`)
+        .addTo(map);
+    }
+
+    const bounds = L.latLngBounds([originPoint, destinationPoint, ...(aircraftPoint ? [aircraftPoint] : [])]);
+    map.fitBounds(bounds.pad(0.24), { animate: false });
+    window.setTimeout(() => map.invalidateSize(), 0);
+  }, [flight, routePoints]);
 
   return (
     <section className="map-panel" aria-label="Flight route map">
-      <svg viewBox="0 0 900 330" role="img">
-        <defs>
-          <linearGradient id="routeGradient" x1="0%" x2="100%">
-            <stop offset="0%" stopColor="#0f766e" />
-            <stop offset="100%" stopColor="#d97706" />
-          </linearGradient>
-        </defs>
-        <rect width="900" height="330" rx="8" />
-        <g className="basemap">
-          <path d="M45 96 C130 25 280 30 360 88 C420 132 500 91 570 113 C675 145 740 108 850 151 L852 322 L44 322 Z" />
-          <path d="M192 45 C248 56 276 82 256 119 C235 156 174 155 136 126 C102 99 120 52 192 45 Z" />
-          <path d="M545 36 C616 38 670 61 692 109 C715 158 670 207 598 205 C525 203 472 166 479 105 C484 59 504 36 545 36 Z" />
-          <path d="M298 190 C352 162 427 170 452 215 C476 258 423 300 345 292 C279 286 246 225 298 190 Z" />
-          <path d="M622 218 C678 196 759 206 802 255 C827 284 798 310 718 309 C648 308 595 275 622 218 Z" />
-        </g>
-        <g className="map-lines">
-          <path d="M120 70 H790 M120 135 H790 M120 200 H790 M120 265 H790" />
-          <path d="M165 42 V288 M300 42 V288 M435 42 V288 M570 42 V288 M705 42 V288" />
-        </g>
-        <path className="route-shadow" d={`M${origin.x} ${origin.y} Q${controlX} ${controlY} ${destination.x} ${destination.y}`} />
-        <path className="route" d={`M${origin.x} ${origin.y} Q${controlX} ${controlY} ${destination.x} ${destination.y}`} />
-        <circle className="airport-dot" cx={origin.x} cy={origin.y} r="9" />
-        <circle className="airport-dot destination" cx={destination.x} cy={destination.y} r="9" />
-        <g className="plane-marker" transform={`translate(${planeX} ${planeY}) rotate(12)`}>
-          <path d="M0 -13 L34 0 L0 13 L7 1 L-18 1 L-18 -1 L7 -1 Z" />
-        </g>
-        <text x={Math.max(28, origin.x - 42)} y={Math.min(306, origin.y + 42)}>{flight.origin.code}</text>
-        <text x={Math.min(805, destination.x - 42)} y={Math.min(306, destination.y + 42)}>{flight.destination.code}</text>
-        <text className="city" x={Math.max(28, origin.x - 42)} y={Math.min(326, origin.y + 62)}>{flight.origin.city}</text>
-        <text className="city" x={Math.min(805, destination.x - 42)} y={Math.min(326, destination.y + 62)}>{flight.destination.city}</text>
-      </svg>
+      <div className="route-map" ref={mapRef} />
+      <div className="map-telemetry">
+        <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
+        <span>Altitude: {flight.altitudeFt ? `${flight.altitudeFt.toLocaleString()} ft` : "Unavailable"}</span>
+        {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
+      </div>
       <p className="source-line">Route, status, and progress source: {flight.dataSource}</p>
     </section>
   );
+}
+
+function greatCirclePoints(start: [number, number], end: [number, number], segments: number): L.LatLngTuple[] {
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const fraction = index / segments;
+    const point = interpolateGreatCircle(start[0], start[1], end[0], end[1], fraction);
+    return [point.lat, point.lon];
+  });
+}
+
+function interpolateGreatCircle(latA: number, lonA: number, latB: number, lonB: number, fraction: number) {
+  const lat1 = toRadians(latA);
+  const lon1 = toRadians(lonA);
+  const lat2 = toRadians(latB);
+  const lon2 = toRadians(lonB);
+  const delta = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2,
+  ));
+  if (delta === 0) return { lat: latA, lon: lonA };
+  const a = Math.sin((1 - fraction) * delta) / Math.sin(delta);
+  const b = Math.sin(fraction * delta) / Math.sin(delta);
+  const x = a * Math.cos(lat1) * Math.cos(lon1) + b * Math.cos(lat2) * Math.cos(lon2);
+  const y = a * Math.cos(lat1) * Math.sin(lon1) + b * Math.cos(lat2) * Math.sin(lon2);
+  const z = a * Math.sin(lat1) + b * Math.sin(lat2);
+  return { lat: toDegrees(Math.atan2(z, Math.sqrt(x ** 2 + y ** 2))), lon: toDegrees(Math.atan2(y, x)) };
+}
+
+function toRadians(value: number) {
+  return value * Math.PI / 180;
+}
+
+function toDegrees(value: number) {
+  return value * 180 / Math.PI;
 }

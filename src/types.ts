@@ -28,10 +28,22 @@ export type FlightLeg = {
   progress: number;
   altitudeFt: number;
   groundSpeedMph: number;
+  aircraftPosition?: AircraftPosition;
+  track?: AircraftPosition[];
   lastUpdated: string;
   dataSource: string;
   sourceUrl?: string;
   alerts: FlightAlert[];
+};
+
+export type AircraftPosition = {
+  lat: number;
+  lon: number;
+  altitudeFt: number;
+  groundSpeedMph?: number;
+  headingDeg?: number;
+  timestamp?: string;
+  source: "FlightAware live position" | "FlightAware track" | "Estimated from schedule";
 };
 
 export type FlightAlert = {

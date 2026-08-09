@@ -34,6 +34,8 @@ Lookup order:
 
 TripTracker no longer falls back to demo data. If neither live source returns parseable flight information, the app shows a lookup error instead of inventing route, gate, or status values.
 
+FlightAware-backed lookups can include live aircraft position and track data. Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude, so TripTracker labels those aircraft map markers as estimated from schedule.
+
 ## Build
 
 ```bash

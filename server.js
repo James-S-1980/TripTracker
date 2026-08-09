@@ -142,6 +142,60 @@ function mapFlightAwareFlight(flight, requestedDate) {
   };
 }
 
+async function enrichFlightAwarePosition(mappedFlight, apiKey) {
+  const [position, track] = await Promise.all([
+    fetchFlightAwarePosition(mappedFlight.id, apiKey).catch(() => null),
+    fetchFlightAwareTrack(mappedFlight.id, apiKey).catch(() => []),
+  ]);
+
+  return {
+    ...mappedFlight,
+    aircraftPosition: position ?? track.at(-1),
+    track: track.length > 0 ? track : undefined,
+    altitudeFt: position?.altitudeFt ?? track.at(-1)?.altitudeFt ?? mappedFlight.altitudeFt,
+    groundSpeedMph: position?.groundSpeedMph ?? track.at(-1)?.groundSpeedMph ?? mappedFlight.groundSpeedMph,
+  };
+}
+
+async function fetchFlightAwarePosition(faFlightId, apiKey) {
+  const response = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(faFlightId)}/position`, {
+    headers: { "x-apikey": apiKey },
+  });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const position = payload.last_position ?? payload.position ?? payload;
+  return mapFlightAwarePosition(position, "FlightAware live position");
+}
+
+async function fetchFlightAwareTrack(faFlightId, apiKey) {
+  const params = new URLSearchParams({ include_estimated_positions: "true" });
+  const response = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(faFlightId)}/track?${params.toString()}`, {
+    headers: { "x-apikey": apiKey },
+  });
+  if (!response.ok) return [];
+  const payload = await response.json();
+  const positions = payload.positions ?? payload.track ?? [];
+  return positions.map((position) => mapFlightAwarePosition(position, "FlightAware track")).filter(Boolean);
+}
+
+function mapFlightAwarePosition(position, source) {
+  const lat = Number(position.latitude ?? position.lat);
+  const lon = Number(position.longitude ?? position.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const altitude = Number(position.altitude ?? position.altitude_ft ?? 0);
+  const groundSpeed = Number(position.groundspeed ?? position.groundspeed_mph ?? position.speed ?? 0);
+
+  return {
+    lat,
+    lon,
+    altitudeFt: altitude > 1000 ? Math.round(altitude) : Math.round(altitude * 100),
+    groundSpeedMph: Number.isFinite(groundSpeed) ? Math.round(groundSpeed * (source.includes("FlightAware") ? 1.15078 : 1)) : undefined,
+    headingDeg: Number(position.heading ?? position.course ?? position.heading_deg),
+    timestamp: position.timestamp ?? position.time,
+    source,
+  };
+}
+
 function chooseFlight(flights, requestedDate) {
   const target = requestedDate.slice(0, 10);
   return flights.find((flight) => (
@@ -207,7 +261,7 @@ async function lookupFlightAware(ident, date) {
 
   const payload = await flightAwareResponse.json();
   const flight = chooseFlight(payload.flights ?? [], date);
-  return flight ? mapFlightAwareFlight(flight, date) : null;
+  return flight ? enrichFlightAwarePosition(mapFlightAwareFlight(flight, date), apiKey) : null;
 }
 
 async function lookupWebFlight(ident, airline, flightNumber, date) {
@@ -297,6 +351,7 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
     progress: status === "Arrived" ? 100 : status === "En Route" ? 70 : 0,
     altitudeFt: 0,
     groundSpeedMph: 0,
+    aircraftPosition: estimatedPosition(origin, destination, status, times.departureTime, times.arrivalTime),
     lastUpdated: new Date().toISOString(),
     dataSource: `Web search flight card${updated ? `, updated ${updated}` : ""}`,
     sourceUrl,
@@ -341,6 +396,10 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
 
   const departureTime = wallTimeToUtcIso(date, departureTimeText, origin.timeZone);
   const arrivalTime = wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone);
+  const altitudeText = text.match(/ALTITUDE\s+(\d+)\s*ft/i)?.[1];
+  const speedText = text.match(/Speed\s+(\d+)\s+kts/i)?.[1];
+  const altitudeFt = Number(altitudeText ?? 0);
+  const speedMph = Math.round(Number(speedText ?? 0) * 1.15078);
 
   return {
     id: `flightstats-${ident}-${date}`,
@@ -359,8 +418,9 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     arrivalTerminal: gates[1]?.[1] ?? "TBD",
     status,
     progress: progressFromTimes(status, departureTime, arrivalTime),
-    altitudeFt: 0,
-    groundSpeedMph: 0,
+    altitudeFt,
+    groundSpeedMph: speedMph,
+    aircraftPosition: estimatedPosition(origin, destination, status, departureTime, arrivalTime, altitudeFt, speedMph),
     lastUpdated: new Date().toISOString(),
     dataSource: "FlightStats public page, powered by Cirium",
     sourceUrl,
@@ -375,6 +435,47 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
       },
     ],
   };
+}
+
+function estimatedPosition(origin, destination, status, departureTime, arrivalTime, altitudeFt = 0, groundSpeedMph = 0) {
+  if (status !== "En Route") return undefined;
+  const progress = progressFromTimes(status, departureTime, arrivalTime) / 100;
+  const point = interpolateGreatCircle(origin, destination, progress);
+  return {
+    lat: point.lat,
+    lon: point.lon,
+    altitudeFt,
+    groundSpeedMph,
+    timestamp: new Date().toISOString(),
+    source: "Estimated from schedule",
+  };
+}
+
+function interpolateGreatCircle(origin, destination, fraction) {
+  const lat1 = toRadians(origin.lat);
+  const lon1 = toRadians(origin.lon);
+  const lat2 = toRadians(destination.lat);
+  const lon2 = toRadians(destination.lon);
+  const delta = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2,
+  ));
+
+  if (delta === 0) return { lat: origin.lat, lon: origin.lon };
+  const a = Math.sin((1 - fraction) * delta) / Math.sin(delta);
+  const b = Math.sin(fraction * delta) / Math.sin(delta);
+  const x = a * Math.cos(lat1) * Math.cos(lon1) + b * Math.cos(lat2) * Math.cos(lon2);
+  const y = a * Math.cos(lat1) * Math.sin(lon1) + b * Math.cos(lat2) * Math.sin(lon2);
+  const z = a * Math.sin(lat1) + b * Math.sin(lat2);
+  return { lat: toDegrees(Math.atan2(z, Math.sqrt(x ** 2 + y ** 2))), lon: toDegrees(Math.atan2(y, x)) };
+}
+
+function toRadians(value) {
+  return value * Math.PI / 180;
+}
+
+function toDegrees(value) {
+  return value * 180 / Math.PI;
 }
 
 function progressFromTimes(status, departureTime, arrivalTime) {

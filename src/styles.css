@@ -548,72 +548,60 @@ dt,
   color: #b42318;
 }
 
-.map-panel svg {
-  display: block;
+.map-panel {
+  min-width: 0;
+}
+
+.route-map {
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  height: clamp(360px, 44vw, 560px);
+  overflow: hidden;
   width: 100%;
 }
 
-.map-panel .source-line {
-  margin-top: 8px;
+.aircraft-map-marker {
+  background: transparent;
+  border: 0;
 }
 
-.map-panel rect {
-  fill: #dbeaf0;
+.aircraft-map-marker span {
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid #0f766e;
+  border-radius: 999px;
+  box-shadow: 0 8px 18px rgba(23, 32, 42, 0.22);
+  color: #0f766e;
+  display: flex;
+  font-size: 1rem;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
 }
 
-.basemap path {
-  fill: #d8e4d4;
-  opacity: 0.95;
-  stroke: #b7c9b1;
-  stroke-width: 1.5;
+.aircraft-map-marker span.estimated {
+  border-color: #d97706;
+  color: #d97706;
 }
 
-.map-lines {
-  fill: none;
-  opacity: 0.34;
-  stroke: #7b9baa;
-  stroke-width: 1;
+.map-telemetry {
+  background: #ffffff;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 10px;
+  padding: 12px;
 }
 
-.route-shadow {
-  fill: none;
-  opacity: 0.26;
-  stroke: #17202a;
-  stroke-linecap: round;
-  stroke-width: 10;
+.map-telemetry strong {
+  color: #17202a;
 }
 
-.route {
-  fill: none;
-  stroke: url(#routeGradient);
-  stroke-linecap: round;
-  stroke-width: 6;
-}
-
-.airport-dot {
-  fill: #0f766e;
-  stroke: #ffffff;
-  stroke-width: 4;
-}
-
-.airport-dot.destination {
-  fill: #d97706;
-}
-
-.plane-marker path {
-  fill: #ffffff;
-}
-
-svg text {
-  fill: #17202a;
-  font-size: 30px;
-  font-weight: 900;
-}
-
-svg text.city {
-  fill: #476159;
-  font-size: 15px;
-  font-weight: 700;
+.map-telemetry span {
+  color: #60756f;
+  font-weight: 800;
 }
 
 .weather-card,
