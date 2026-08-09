@@ -40,6 +40,26 @@ function formatTimestamp(value: string | null): string {
   }).format(new Date(value));
 }
 
+function durationText(ms: number): string {
+  const absoluteMinutes = Math.max(0, Math.round(Math.abs(ms) / 60000));
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+}
+
+function statusLead(flight: FlightLeg): string {
+  const now = Date.now();
+  const departure = new Date(flight.departureTime).getTime();
+  const arrival = new Date(flight.arrivalTime).getTime();
+  if (flight.status === "Arrived") return `Arrived ${durationText(now - arrival)} ago`;
+  if (flight.status === "En Route") return `Arriving in ${durationText(arrival - now)}`;
+  if (flight.status === "Boarding") return `Departs in ${durationText(departure - now)}`;
+  if (flight.status === "Delayed") return `Delayed departure ${formatTime(flight.departureTime)}`;
+  if (flight.status === "Cancelled") return "Flight cancelled";
+  return `Departs in ${durationText(departure - now)}`;
+}
+
 function splitFlightDesignator(value: string): [string, string] {
   const spaced = value.trim().match(/^([A-Z0-9]{2,3})\s+(\d+)$/i);
   if (spaced) return [spaced[1], spaced[2]];
@@ -213,7 +233,7 @@ export function App() {
         </div>
       </section>
 
-      <section className="tracker-grid">
+      <section className={`tracker-grid ${activeFlight ? "has-active-flight" : ""}`}>
         <aside className="sidebar">
           <form className="lookup-panel" onSubmit={addFlight}>
             <div className="panel-title">
@@ -333,72 +353,75 @@ export function App() {
         <section className="dashboard">
           {activeFlight ? (
             <>
-              <div className="flight-header">
-                <div className="airline-title">
-                  <AirlineLogo
-                    code={activeFlight.airlineCode ?? splitFlightDesignator(activeFlight.flightNumber)[0]}
-                    logoUrl={activeFlight.airlineLogoUrl}
-                  />
-                  <div>
-                    <p>{activeFlight.airline}</p>
-                    <h2>{activeFlight.flightNumber}</h2>
+              <section className="live-flight-panel">
+                <FlightMap flight={activeFlight} />
+                <article className="flight-card">
+                  <div className="flight-card-top">
+                    <div className="airline-title">
+                      <AirlineLogo
+                        code={activeFlight.airlineCode ?? splitFlightDesignator(activeFlight.flightNumber)[0]}
+                        logoUrl={activeFlight.airlineLogoUrl}
+                      />
+                      <div>
+                        <p>{activeFlight.airline}</p>
+                        <h2>{activeFlight.flightNumber}</h2>
+                        <span>{formatDate(activeFlight.date)} / {activeFlight.origin.code} to {activeFlight.destination.code}</span>
+                      </div>
+                    </div>
+                    <button className="icon-button" onClick={refreshActiveFlight} disabled={isLoading} aria-label="Refresh flight">
+                      <RefreshCw size={18} />
+                    </button>
                   </div>
-                </div>
-                <div className="header-actions">
-                  <span className={`status-pill ${activeFlight.status.toLowerCase().replace(/\s+/g, "-")}`}>
-                    {activeFlight.status}
-                  </span>
-                  <button className="icon-button" onClick={refreshActiveFlight} disabled={isLoading} aria-label="Refresh flight">
-                    <RefreshCw size={18} />
-                  </button>
-                </div>
-              </div>
 
-              <section className="flight-brief">
-                <div>
-                  <small>Status</small>
-                  <strong>{activeFlight.status}</strong>
-                </div>
-                <div>
-                  <small>Route</small>
-                  <strong>{activeFlight.origin.code} to {activeFlight.destination.code}</strong>
-                  <span>{activeFlight.origin.city} to {activeFlight.destination.city}</span>
-                </div>
-                <div>
-                  <small>Boarding gate</small>
-                  <strong>T{activeFlight.terminal} / {activeFlight.boardingGate}</strong>
-                </div>
-                <div>
-                  <small>Arrival gate</small>
-                  <strong>T{activeFlight.arrivalTerminal} / {activeFlight.arrivalGate}</strong>
-                </div>
-                <div className="provider-note">
-                  <small>Data source</small>
-                  <strong>{activeFlight.dataSource}</strong>
-                  {activeFlight.sourceUrl && <a href={activeFlight.sourceUrl} target="_blank" rel="noreferrer">Open source search</a>}
-                </div>
+                  <div className={`status-banner ${activeFlight.status.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <strong>{statusLead(activeFlight)}</strong>
+                    <span>{activeFlight.status}</span>
+                  </div>
+
+                  <div className="route-times">
+                    <div className="airport-stop">
+                      <small>{activeFlight.origin.code} / {activeFlight.origin.name}</small>
+                      <strong>{formatZonedTime(activeFlight.departureTime, activeFlight.origin.timeZone ?? "America/New_York")}</strong>
+                      <span>Your time: {formatZonedTime(activeFlight.departureTime, "America/New_York")}</span>
+                      <em>{activeFlight.origin.city}</em>
+                    </div>
+
+                    <div className="route-progress">
+                      <span>{activeFlight.progress}%</span>
+                      <div><i style={{ width: `${activeFlight.progress}%` }} /></div>
+                    </div>
+
+                    <div className="airport-stop">
+                      <small>{activeFlight.destination.code} / {activeFlight.destination.name}</small>
+                      <strong>{formatZonedTime(activeFlight.arrivalTime, activeFlight.destination.timeZone ?? "America/New_York")}</strong>
+                      <span>Your time: {formatZonedTime(activeFlight.arrivalTime, "America/New_York")}</span>
+                      <em>{activeFlight.destination.city}</em>
+                    </div>
+                  </div>
+
+                  <div className="gate-row">
+                    <div>
+                      <small>Boarding</small>
+                      <strong>T{activeFlight.terminal} / {activeFlight.boardingGate}</strong>
+                    </div>
+                    <div>
+                      <small>Arrival</small>
+                      <strong>T{activeFlight.arrivalTerminal} / {activeFlight.arrivalGate}</strong>
+                    </div>
+                  </div>
+
+                  <div className="compact-facts">
+                    <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
+                    <span><Plane size={15} /> {activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</span>
+                    <span><MapPin size={15} /> Updated {timeAgo(activeFlight.lastUpdated)}</span>
+                  </div>
+
+                  <p className="source-line">
+                    Source: {activeFlight.dataSource}
+                    {activeFlight.sourceUrl && <a href={activeFlight.sourceUrl} target="_blank" rel="noreferrer"> Open source</a>}
+                  </p>
+                </article>
               </section>
-
-              <div className="summary-strip">
-                <Metric icon={<Plane />} label="Status" value={activeFlight.status} source={activeFlight.dataSource} tone={activeFlight.status === "Delayed" ? "danger" : "good"} />
-                <Metric icon={<MapPin />} label="Boarding" value={`T${activeFlight.terminal} ${activeFlight.boardingGate}`} tone="warn" source={activeFlight.dataSource} />
-                <TimeMetric
-                  icon={<Timer />}
-                  label={`Depart ${activeFlight.origin.code}`}
-                  value={formatZonedTime(activeFlight.departureTime, activeFlight.origin.timeZone ?? "America/New_York")}
-                  subValue={`Your time: ${formatZonedTime(activeFlight.departureTime, "America/New_York")}`}
-                  source={activeFlight.dataSource}
-                />
-                <TimeMetric
-                  icon={<CalendarDays />}
-                  label={`Arrive ${activeFlight.destination.code}`}
-                  value={formatZonedTime(activeFlight.arrivalTime, activeFlight.destination.timeZone ?? "America/New_York")}
-                  subValue={`${formatDate(activeFlight.date)} / Your time: ${formatZonedTime(activeFlight.arrivalTime, "America/New_York")}`}
-                  source={activeFlight.dataSource}
-                />
-              </div>
-
-              <FlightMap flight={activeFlight} />
 
               <div className="detail-grid">
                 <WeatherCard title="Origin weather" code={activeFlight.origin.code} weather={weather[activeFlight.origin.code]} />
