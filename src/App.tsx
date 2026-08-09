@@ -10,6 +10,9 @@ import "leaflet/dist/leaflet.css";
 const storageKey = "triptracker:flights";
 const refreshIntervalMs = 30000;
 
+type SoundEventType = "takeoff" | "landing" | "gate";
+type AudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
@@ -75,6 +78,27 @@ function gateDisplay(terminal: string, gate: string): string {
   return "Pending";
 }
 
+function soundEventsForFlightChange(previous: FlightLeg, next: FlightLeg): SoundEventType[] {
+  const events: SoundEventType[] = [];
+  if (previous.status !== "En Route" && next.status === "En Route") {
+    events.push("takeoff");
+  }
+  if (previous.status !== "Arrived" && next.status === "Arrived") {
+    events.push("landing");
+  }
+
+  const previousDepartureGate = gateDisplay(previous.terminal, previous.boardingGate);
+  const nextDepartureGate = gateDisplay(next.terminal, next.boardingGate);
+  const previousArrivalGate = gateDisplay(previous.arrivalTerminal, previous.arrivalGate);
+  const nextArrivalGate = gateDisplay(next.arrivalTerminal, next.arrivalGate);
+  const departureChanged = previousDepartureGate !== nextDepartureGate && nextDepartureGate !== "Pending";
+  const arrivalChanged = previousArrivalGate !== nextArrivalGate && nextArrivalGate !== "Pending";
+  if (departureChanged || arrivalChanged) {
+    events.push("gate");
+  }
+  return events;
+}
+
 function splitFlightDesignator(value: string): [string, string] {
   const spaced = value.trim().match(/^([A-Z0-9]{2,3})\s+(\d+)$/i);
   if (spaced) return [spaced[1], spaced[2]];
@@ -98,6 +122,8 @@ export function App() {
   const [flightFocused, setFlightFocused] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastSoundAtRef = useRef<Record<string, number>>({});
 
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
@@ -155,6 +181,7 @@ export function App() {
 
   async function addFlight(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void primeAudio();
     setIsLoading(true);
     setLookupError(null);
     try {
@@ -171,6 +198,7 @@ export function App() {
 
   async function refreshActiveFlight() {
     if (!activeFlight) return;
+    void primeAudio();
     setIsLoading(true);
     setLookupError(null);
     try {
@@ -199,6 +227,9 @@ export function App() {
       const original = flightsToRefresh[index];
       if (result.status === "fulfilled") {
         refreshMap.set(original.id, result.value);
+        soundEventsForFlightChange(original, result.value).forEach((eventType) => {
+          playFlightSound(eventType, original.id);
+        });
       } else {
         failures.push(original.flightNumber);
       }
@@ -227,8 +258,57 @@ export function App() {
     });
   }
 
+  async function primeAudio(): Promise<AudioContext | null> {
+    if (audioContextRef.current) {
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume().catch(() => undefined);
+      }
+      return audioContextRef.current;
+    }
+
+    const AudioContextConstructor = window.AudioContext ?? (window as AudioWindow).webkitAudioContext;
+    if (!AudioContextConstructor) return null;
+    const context = new AudioContextConstructor();
+    audioContextRef.current = context;
+    if (context.state === "suspended") {
+      await context.resume().catch(() => undefined);
+    }
+    return context;
+  }
+
+  function playFlightSound(eventType: SoundEventType, flightId: string) {
+    const key = `${flightId}:${eventType}`;
+    const now = Date.now();
+    if (now - (lastSoundAtRef.current[key] ?? 0) < 20000) return;
+    lastSoundAtRef.current[key] = now;
+
+    void primeAudio().then((context) => {
+      if (!context) return;
+      const start = context.currentTime + 0.02;
+      const patterns: Record<SoundEventType, number[]> = {
+        takeoff: [523, 659, 784],
+        landing: [784, 659, 523],
+        gate: [880, 880],
+      };
+
+      patterns[eventType].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const toneStart = start + index * 0.16;
+        oscillator.type = eventType === "gate" ? "square" : "sine";
+        oscillator.frequency.setValueAtTime(frequency, toneStart);
+        gain.gain.setValueAtTime(0.0001, toneStart);
+        gain.gain.exponentialRampToValueAtTime(0.08, toneStart + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, toneStart + 0.14);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start(toneStart);
+        oscillator.stop(toneStart + 0.16);
+      });
+    });
+  }
+
   return (
-    <main className="app-shell">
+    <main className="app-shell" onPointerDown={() => void primeAudio()}>
       <section className="topbar">
         <div className="brand-block">
           <div className="brand-mark" aria-hidden="true">
