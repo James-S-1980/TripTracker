@@ -195,9 +195,14 @@ export function App() {
   return (
     <main className="app-shell">
       <section className="topbar">
-        <div>
-          <p className="eyebrow">TripTracker</p>
-          <h1>Flight command center</h1>
+        <div className="brand-block">
+          <div className="brand-mark" aria-hidden="true">
+            <Plane size={26} />
+          </div>
+          <div>
+            <p className="eyebrow">Live flight intelligence</p>
+            <h1>TripTracker</h1>
+          </div>
         </div>
         <div className="freshness">
           <Radar size={18} />
@@ -211,6 +216,10 @@ export function App() {
       <section className="tracker-grid">
         <aside className="sidebar">
           <form className="lookup-panel" onSubmit={addFlight}>
+            <div className="panel-title">
+              <Search size={18} />
+              <h2>Track a Flight</h2>
+            </div>
             <label>
               Airline
               <div className="smart-field">
@@ -243,7 +252,7 @@ export function App() {
                   onChange={(event) => setFlightNumber(event.target.value.replace(/\D/g, ""))}
                   onFocus={() => setFlightFocused(true)}
                   inputMode="numeric"
-                  placeholder="401"
+                  placeholder="Enter flight number"
                 />
                 {flightFocused && flightSuggestions.length > 0 && (
                   <div className="suggestions compact">
@@ -302,7 +311,7 @@ export function App() {
                   <span className="tracked-copy">
                     <strong>{flight.flightNumber}</strong>
                     <span>{flight.origin.code} to {flight.destination.code}</span>
-                    <em>{flight.dataSource}</em>
+                    <em>Source: {flight.dataSource}</em>
                   </span>
                 </button>
                 <button
@@ -335,9 +344,14 @@ export function App() {
                     <h2>{activeFlight.flightNumber}</h2>
                   </div>
                 </div>
-                <button className="icon-button" onClick={refreshActiveFlight} disabled={isLoading} aria-label="Refresh flight">
-                  <RefreshCw size={18} />
-                </button>
+                <div className="header-actions">
+                  <span className={`status-pill ${activeFlight.status.toLowerCase().replace(/\s+/g, "-")}`}>
+                    {activeFlight.status}
+                  </span>
+                  <button className="icon-button" onClick={refreshActiveFlight} disabled={isLoading} aria-label="Refresh flight">
+                    <RefreshCw size={18} />
+                  </button>
+                </div>
               </div>
 
               <section className="flight-brief">
@@ -547,6 +561,13 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
 
   return (
     <section className="map-panel" aria-label="Flight route map">
+      <div className="map-toolbar">
+        <div>
+          <small>Route map</small>
+          <strong>{flight.origin.code} to {flight.destination.code}</strong>
+        </div>
+        <span className="source-chip">{flight.dataSource}</span>
+      </div>
       <div className="route-map" ref={mapRef} />
       <div className="map-telemetry">
         <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
