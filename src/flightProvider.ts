@@ -49,6 +49,25 @@ function knownFlightSnapshot(airlineCode: string, flightNumber: string, date: st
 }
 
 export async function lookupFlight(airlineInput: string, flightNumber: string, date: string): Promise<FlightLeg> {
+  const airline = resolveAirline(airlineInput);
+  const liveFlight = await lookupFlightAware(airline.code, flightNumber, date);
+  if (liveFlight) return liveFlight;
+
+  return lookupDemoFlight(airlineInput, flightNumber, date);
+}
+
+async function lookupFlightAware(airlineCode: string, flightNumber: string, date: string): Promise<FlightLeg | null> {
+  try {
+    const params = new URLSearchParams({ airline: airlineCode, flightNumber, date });
+    const response = await fetch(`/api/flights/lookup?${params.toString()}`);
+    if (!response.ok) return null;
+    return await response.json() as FlightLeg;
+  } catch {
+    return null;
+  }
+}
+
+async function lookupDemoFlight(airlineInput: string, flightNumber: string, date: string): Promise<FlightLeg> {
   await new Promise((resolve) => window.setTimeout(resolve, 450));
 
   const airline = resolveAirline(airlineInput);

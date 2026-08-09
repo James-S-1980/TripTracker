@@ -11,6 +11,18 @@ npm install
 npm run dev
 ```
 
+## Live FlightAware data
+
+FlightAware AeroAPI is supported through the local server proxy so the API key is not exposed to the browser.
+
+```bash
+$env:FLIGHTAWARE_AEROAPI_KEY="your-key"
+npm run build
+npm start
+```
+
+Open `http://127.0.0.1:8787`. If the key is missing or FlightAware has no match, the app falls back to the demo provider and labels the data source in the flight brief.
+
 ## Build
 
 ```bash

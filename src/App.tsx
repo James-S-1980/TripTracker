@@ -29,6 +29,14 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
+function splitFlightDesignator(value: string): [string, string] {
+  const spaced = value.trim().match(/^([A-Z0-9]{2,3})\s+(\d+)$/i);
+  if (spaced) return [spaced[1], spaced[2]];
+  const compact = value.trim().match(/^([A-Z0-9]{2,3})(\d+)$/i);
+  if (compact) return [compact[1], compact[2]];
+  return value.split(" ", 2) as [string, string];
+}
+
 export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("401");
@@ -100,7 +108,7 @@ export function App() {
 
   async function refreshActiveFlight() {
     if (!activeFlight) return;
-    const [code, number] = activeFlight.flightNumber.split(" ");
+    const [code, number] = splitFlightDesignator(activeFlight.flightNumber);
     setIsLoading(true);
     const flight = await lookupFlight(code, number, activeFlight.date);
     setFlights((current) => current.map((item) => item.id === flight.id ? flight : item));
