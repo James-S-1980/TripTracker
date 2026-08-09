@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "generate:airports": "node scripts/generate-airports.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server.js"
@@ -16,6 +17,7 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typescript": "^5.9.2",
+    "tz-lookup": "^6.1.25",
     "vite": "^7.1.0"
   },
   "devDependencies": {

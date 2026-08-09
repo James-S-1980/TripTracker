@@ -37,3 +37,16 @@ TripTracker no longer falls back to demo data. If neither live source returns pa
 ```bash
 npm run build
 ```
+
+## Airport catalog
+
+The airport catalog is generated from current OurAirports data and includes airports with IATA codes plus derived IANA time zones.
+
+```bash
+npm run generate:airports
+```
+
+Generated files:
+
+- `src/airportCatalog.generated.json`
+- `src/airportCatalog.generated.ts`

@@ -1,4 +1,5 @@
 import express from "express";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
+const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 
 const airlineIcaoByIata = {
   AA: "AAL",
@@ -33,27 +35,7 @@ const airlineBrands = {
   WN: { name: "Southwest Airlines", logoUrl: "https://logo.clearbit.com/southwest.com" },
 };
 
-const airportCatalog = {
-  ATL: { code: "ATL", name: "Hartsfield-Jackson Atlanta International", city: "Atlanta", lat: 33.6407, lon: -84.4277, timeZone: "America/New_York" },
-  BOS: { code: "BOS", name: "Boston Logan International", city: "Boston", lat: 42.3656, lon: -71.0096, timeZone: "America/New_York" },
-  BWI: { code: "BWI", name: "Baltimore/Washington International Thurgood Marshall Airport", city: "Baltimore", lat: 39.1774, lon: -76.6684, timeZone: "America/New_York" },
-  CLT: { code: "CLT", name: "Charlotte Douglas International", city: "Charlotte", lat: 35.214, lon: -80.9431, timeZone: "America/New_York" },
-  CUN: { code: "CUN", name: "Cancun International Airport", city: "Cancun", lat: 21.0365, lon: -86.8771, timeZone: "America/Cancun" },
-  DCA: { code: "DCA", name: "Ronald Reagan Washington National", city: "Washington", lat: 38.8512, lon: -77.0402, timeZone: "America/New_York" },
-  DEN: { code: "DEN", name: "Denver International", city: "Denver", lat: 39.8561, lon: -104.6737, timeZone: "America/Denver" },
-  DFW: { code: "DFW", name: "Dallas Fort Worth International", city: "Dallas-Fort Worth", lat: 32.8998, lon: -97.0403, timeZone: "America/Chicago" },
-  EWR: { code: "EWR", name: "Newark Liberty International", city: "Newark", lat: 40.6895, lon: -74.1745, timeZone: "America/New_York" },
-  IAD: { code: "IAD", name: "Washington Dulles International", city: "Washington", lat: 38.9531, lon: -77.4565, timeZone: "America/New_York" },
-  JFK: { code: "JFK", name: "John F. Kennedy International", city: "New York", lat: 40.6413, lon: -73.7781, timeZone: "America/New_York" },
-  LAS: { code: "LAS", name: "Harry Reid International", city: "Las Vegas", lat: 36.084, lon: -115.1537, timeZone: "America/Los_Angeles" },
-  LAX: { code: "LAX", name: "Los Angeles International", city: "Los Angeles", lat: 33.9416, lon: -118.4085, timeZone: "America/Los_Angeles" },
-  MIA: { code: "MIA", name: "Miami International", city: "Miami", lat: 25.7959, lon: -80.287, timeZone: "America/New_York" },
-  ORD: { code: "ORD", name: "Chicago O'Hare International", city: "Chicago", lat: 41.9742, lon: -87.9073, timeZone: "America/Chicago" },
-  PHX: { code: "PHX", name: "Phoenix Sky Harbor International", city: "Phoenix", lat: 33.4352, lon: -112.0101, timeZone: "America/Phoenix" },
-  SEA: { code: "SEA", name: "Seattle-Tacoma International", city: "Seattle", lat: 47.4502, lon: -122.3088, timeZone: "America/Los_Angeles" },
-  SFO: { code: "SFO", name: "San Francisco International", city: "San Francisco", lat: 37.6213, lon: -122.379, timeZone: "America/Los_Angeles" },
-  XNA: { code: "XNA", name: "Northwest Arkansas National Airport", city: "Bentonville", lat: 36.2819, lon: -94.3068, timeZone: "America/Chicago" },
-};
+const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
 
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
