@@ -29,6 +29,15 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
+function formatTimestamp(value: string | null): string {
+  if (!value) return "Not refreshed yet";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
 function splitFlightDesignator(value: string): [string, string] {
   const spaced = value.trim().match(/^([A-Z0-9]{2,3})\s+(\d+)$/i);
   if (spaced) return [spaced[1], spaced[2]];
@@ -51,6 +60,7 @@ export function App() {
   const [airlineFocused, setAirlineFocused] = useState(false);
   const [flightFocused, setFlightFocused] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
 
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
@@ -66,7 +76,7 @@ export function App() {
       id: `${activeFlight.id}-route`,
       priority: "normal" as const,
       title: "Route monitored",
-      message: `${activeFlight.origin.code} to ${activeFlight.destination.code} is being watched for departure, gate, and arrival changes.`,
+      message: `${activeFlight.origin.code} to ${activeFlight.destination.code} is being watched for departure, gate, and arrival changes. Source: ${activeFlight.dataSource}.`,
       timestamp: activeFlight.lastUpdated,
     };
     return [...activeFlight.alerts, routeItem]
@@ -75,6 +85,14 @@ export function App() {
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
+  }, [flights]);
+
+  useEffect(() => {
+    if (flights.length === 0) return;
+    const intervalId = window.setInterval(() => {
+      void refreshTrackedFlights(true);
+    }, 60000);
+    return () => window.clearInterval(intervalId);
   }, [flights]);
 
   useEffect(() => {
@@ -106,6 +124,7 @@ export function App() {
       const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date);
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
+      setLastRefreshAt(new Date().toISOString());
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
     } finally {
@@ -115,17 +134,49 @@ export function App() {
 
   async function refreshActiveFlight() {
     if (!activeFlight) return;
-    const [code, number] = splitFlightDesignator(activeFlight.flightNumber);
     setIsLoading(true);
     setLookupError(null);
     try {
-      const flight = await lookupFlight(code, number, activeFlight.date);
-      setFlights((current) => current.map((item) => item.id === activeFlight.id ? flight : item));
-      setActiveId(flight.id);
+      await refreshTrackedFlights(false, activeFlight.id);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function refreshTrackedFlights(silent: boolean, focusedFlightId?: string) {
+    const flightsToRefresh = focusedFlightId
+      ? flights.filter((flight) => flight.id === focusedFlightId)
+      : flights;
+    if (flightsToRefresh.length === 0) return;
+
+    const refreshed = await Promise.allSettled(flightsToRefresh.map((flight) => {
+      const [code, number] = splitFlightDesignator(flight.flightNumber);
+      return lookupFlight(code, number, flight.date);
+    }));
+    const refreshMap = new Map<string, FlightLeg>();
+    const failures: string[] = [];
+
+    refreshed.forEach((result, index) => {
+      const original = flightsToRefresh[index];
+      if (result.status === "fulfilled") {
+        refreshMap.set(original.id, result.value);
+      } else {
+        failures.push(original.flightNumber);
+      }
+    });
+
+    if (refreshMap.size > 0) {
+      setFlights((current) => current.map((flight) => refreshMap.get(flight.id) ?? flight));
+      if (activeFlight && refreshMap.has(activeFlight.id)) {
+        setActiveId(refreshMap.get(activeFlight.id)!.id);
+      }
+      setLastRefreshAt(new Date().toISOString());
+    }
+
+    if (failures.length > 0 && !silent) {
+      throw new Error(`Refresh failed for ${failures.join(", ")}.`);
     }
   }
 
@@ -148,7 +199,10 @@ export function App() {
         </div>
         <div className="freshness">
           <Radar size={18} />
-          <span>Prioritizing gate and status changes</span>
+          <span>
+            Auto-refresh every minute
+            <small>Last refresh: {formatTimestamp(lastRefreshAt)}</small>
+          </span>
         </div>
       </section>
 
@@ -246,6 +300,7 @@ export function App() {
                   <span className="tracked-copy">
                     <strong>{flight.flightNumber}</strong>
                     <span>{flight.origin.code} to {flight.destination.code}</span>
+                    <em>{flight.dataSource}</em>
                   </span>
                 </button>
                 <button
@@ -309,19 +364,21 @@ export function App() {
               </section>
 
               <div className="summary-strip">
-                <Metric icon={<Plane />} label="Status" value={activeFlight.status} tone={activeFlight.status === "Delayed" ? "danger" : "good"} />
-                <Metric icon={<MapPin />} label="Boarding" value={`T${activeFlight.terminal} ${activeFlight.boardingGate}`} tone="warn" />
+                <Metric icon={<Plane />} label="Status" value={activeFlight.status} source={activeFlight.dataSource} tone={activeFlight.status === "Delayed" ? "danger" : "good"} />
+                <Metric icon={<MapPin />} label="Boarding" value={`T${activeFlight.terminal} ${activeFlight.boardingGate}`} tone="warn" source={activeFlight.dataSource} />
                 <TimeMetric
                   icon={<Timer />}
                   label={`Depart ${activeFlight.origin.code}`}
                   value={formatZonedTime(activeFlight.departureTime, activeFlight.origin.timeZone ?? "America/New_York")}
                   subValue={`Your time: ${formatZonedTime(activeFlight.departureTime, "America/New_York")}`}
+                  source={activeFlight.dataSource}
                 />
                 <TimeMetric
                   icon={<CalendarDays />}
                   label={`Arrive ${activeFlight.destination.code}`}
                   value={formatZonedTime(activeFlight.arrivalTime, activeFlight.destination.timeZone ?? "America/New_York")}
                   subValue={`${formatDate(activeFlight.date)} / Your time: ${formatZonedTime(activeFlight.arrivalTime, "America/New_York")}`}
+                  source={activeFlight.dataSource}
                 />
               </div>
 
@@ -372,19 +429,20 @@ function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUr
   );
 }
 
-function Metric({ icon, label, value, tone = "neutral" }: { icon: React.ReactNode; label: string; value: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
+function Metric({ icon, label, value, source, tone = "neutral" }: { icon: React.ReactNode; label: string; value: string; source?: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
   return (
     <div className={`metric ${tone}`}>
       <span>{icon}</span>
       <div>
         <small>{label}</small>
         <strong>{value}</strong>
+        {source && <em>{source}</em>}
       </div>
     </div>
   );
 }
 
-function TimeMetric({ icon, label, value, subValue }: { icon: React.ReactNode; label: string; value: string; subValue: string }) {
+function TimeMetric({ icon, label, value, subValue, source }: { icon: React.ReactNode; label: string; value: string; subValue: string; source: string }) {
   return (
     <div className="metric time-metric">
       <span>{icon}</span>
@@ -392,6 +450,7 @@ function TimeMetric({ icon, label, value, subValue }: { icon: React.ReactNode; l
         <small>{label}</small>
         <strong>{value}</strong>
         <em>{subValue}</em>
+        <em>{source}</em>
       </div>
     </div>
   );
@@ -413,6 +472,7 @@ function WeatherCard({ title, code, weather }: { title: string; code: string; we
           <div><dt>Sky</dt><dd>{weather.condition}</dd></div>
         </dl>
       ) : <p className="empty">Loading weather...</p>}
+      <p className="source-line">Source: Open-Meteo</p>
     </article>
   );
 }
@@ -468,6 +528,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         <text className="city" x={Math.max(28, origin.x - 42)} y={Math.min(326, origin.y + 62)}>{flight.origin.city}</text>
         <text className="city" x={Math.min(805, destination.x - 42)} y={Math.min(326, destination.y + 62)}>{flight.destination.city}</text>
       </svg>
+      <p className="source-line">Route, status, and progress source: {flight.dataSource}</p>
     </section>
   );
 }

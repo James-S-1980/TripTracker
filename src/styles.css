@@ -65,6 +65,17 @@ h1 {
   padding: 12px 14px;
 }
 
+.freshness span {
+  display: grid;
+  gap: 2px;
+}
+
+.freshness small {
+  color: #60756f;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .tracker-grid {
   display: grid;
   gap: 18px;
@@ -358,6 +369,16 @@ dt,
   min-width: 0;
 }
 
+.tracked-copy em {
+  color: #60756f;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .delete-flight {
   align-items: center;
   background: transparent;
@@ -497,11 +518,20 @@ dt,
   font-size: 1.25rem;
 }
 
+.metric em {
+  color: #60756f;
+  display: block;
+  font-size: 0.76rem;
+  font-style: normal;
+  font-weight: 800;
+  margin-top: 3px;
+}
+
 .time-metric strong {
   font-size: 1.05rem;
 }
 
-.time-metric em {
+.time-metric em:first-of-type {
   color: #60756f;
   display: block;
   font-size: 0.8rem;
@@ -521,6 +551,10 @@ dt,
 .map-panel svg {
   display: block;
   width: 100%;
+}
+
+.map-panel .source-line {
+  margin-top: 8px;
 }
 
 .map-panel rect {
@@ -611,8 +645,15 @@ dd {
 }
 
 .empty,
-.empty-state p {
+.empty-state p,
+.source-line {
   color: #60756f;
+}
+
+.source-line {
+  font-size: 0.8rem;
+  font-weight: 800;
+  margin: 12px 0 0;
 }
 
 .empty-state {
