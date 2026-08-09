@@ -30,7 +30,7 @@ function formatDate(value: string): string {
 }
 
 export function App() {
-  const [airline, setAirline] = useState("Delta Air Lines");
+  const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("401");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [flights, setFlights] = useState<FlightLeg[]>(() => {
@@ -142,7 +142,7 @@ export function App() {
                   onBlur={() => window.setTimeout(() => setAirlineFocused(false), 120)}
                   onChange={(event) => setAirline(event.target.value)}
                   onFocus={() => setAirlineFocused(true)}
-                  placeholder="DL or Delta Air Lines"
+                  placeholder="Enter Airline"
                 />
                 {airlineFocused && airlineSuggestions.length > 0 && (
                   <div className="suggestions">
