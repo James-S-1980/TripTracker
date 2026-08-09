@@ -8,6 +8,7 @@ import type { FlightLeg, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
+const refreshIntervalMs = 30000;
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
@@ -127,7 +128,7 @@ export function App() {
     if (flights.length === 0) return;
     const intervalId = window.setInterval(() => {
       void refreshTrackedFlights(true);
-    }, 60000);
+    }, refreshIntervalMs);
     return () => window.clearInterval(intervalId);
   }, [flights]);
 
@@ -241,7 +242,7 @@ export function App() {
         <div className="freshness">
           <Radar size={18} />
           <span>
-            Auto-refresh every minute
+            Auto-refresh every 30 seconds
             <small>Last refresh: {formatTimestamp(lastRefreshAt)}</small>
           </span>
         </div>
