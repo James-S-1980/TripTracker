@@ -11,6 +11,8 @@ npm install
 npm run dev
 ```
 
+`npm run dev` starts both the TripTracker API server and the Vite web app. The flight lookup UI depends on the API server being available.
+
 ## Live FlightAware data
 
 FlightAware AeroAPI is supported through the local server proxy so the API key is not exposed to the browser.
