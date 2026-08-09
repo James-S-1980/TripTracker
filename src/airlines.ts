@@ -7,13 +7,13 @@ export type Airline = {
 };
 
 export const airlines: Airline[] = [
-  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "https://images.kiwi.com/airlines/64/AA.png" },
-  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "https://images.kiwi.com/airlines/64/AS.png" },
-  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "https://images.kiwi.com/airlines/64/B6.png" },
-  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "https://images.kiwi.com/airlines/64/DL.png" },
-  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
-  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
-  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
+  { code: "AA", name: "American Airlines", callsign: "American", aliases: ["AAL"], logoUrl: "" },
+  { code: "AS", name: "Alaska Airlines", callsign: "Alaska", aliases: ["ASA"], logoUrl: "" },
+  { code: "B6", name: "JetBlue", callsign: "JetBlue", aliases: ["JBU"], logoUrl: "" },
+  { code: "DL", name: "Delta Air Lines", callsign: "Delta", aliases: ["DAL"], logoUrl: "" },
+  { code: "F9", name: "Frontier Airlines", callsign: "Frontier", aliases: ["FFT"], logoUrl: "" },
+  { code: "NK", name: "Spirit Airlines", callsign: "Spirit Wings", aliases: ["NKS"], logoUrl: "" },
+  { code: "UA", name: "United Airlines", callsign: "United", aliases: ["UAL"], logoUrl: "" },
   { code: "WN", name: "Southwest Airlines", callsign: "Southwest", aliases: ["SWA", "SW"], logoUrl: "" },
 ];
 

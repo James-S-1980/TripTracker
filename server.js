@@ -31,13 +31,13 @@ const airlineIataByIcao = Object.fromEntries(
 );
 
 const airlineBrands = {
-  AA: { name: "American Airlines", logoUrl: "https://images.kiwi.com/airlines/64/AA.png" },
-  AS: { name: "Alaska Airlines", logoUrl: "https://images.kiwi.com/airlines/64/AS.png" },
-  B6: { name: "JetBlue", logoUrl: "https://images.kiwi.com/airlines/64/B6.png" },
-  DL: { name: "Delta Air Lines", logoUrl: "https://images.kiwi.com/airlines/64/DL.png" },
-  F9: { name: "Frontier Airlines", logoUrl: "https://images.kiwi.com/airlines/64/F9.png" },
-  NK: { name: "Spirit Airlines", logoUrl: "https://images.kiwi.com/airlines/64/NK.png" },
-  UA: { name: "United Airlines", logoUrl: "https://images.kiwi.com/airlines/64/UA.png" },
+  AA: { name: "American Airlines", logoUrl: "" },
+  AS: { name: "Alaska Airlines", logoUrl: "" },
+  B6: { name: "JetBlue", logoUrl: "" },
+  DL: { name: "Delta Air Lines", logoUrl: "" },
+  F9: { name: "Frontier Airlines", logoUrl: "" },
+  NK: { name: "Spirit Airlines", logoUrl: "" },
+  UA: { name: "United Airlines", logoUrl: "" },
   WN: { name: "Southwest Airlines", logoUrl: "" },
 };
 
