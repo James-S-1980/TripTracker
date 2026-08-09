@@ -542,15 +542,21 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
 
     if (aircraftPoint) {
       const live = aircraft?.source !== "Estimated from schedule";
+      const heading = Number.isFinite(aircraft?.headingDeg) ? ` style="transform: rotate(${aircraft?.headingDeg}deg)"` : "";
       L.marker(aircraftPoint, {
         icon: L.divIcon({
           className: "aircraft-map-marker",
-          html: `<span class="${live ? "live" : "estimated"}">&#9992;</span>`,
+          html: `<span class="${live ? "live" : "estimated"}"${heading}>&#9992;</span>`,
           iconAnchor: [16, 16],
           iconSize: [32, 32],
         }),
       })
-        .bindPopup(`${flight.flightNumber}<br>${aircraft?.source}<br>${aircraft?.altitudeFt.toLocaleString()} ft`)
+        .bindPopup([
+          flight.flightNumber,
+          aircraft?.callsign ? `Callsign ${aircraft.callsign}` : undefined,
+          aircraft?.source,
+          `${aircraft?.altitudeFt.toLocaleString()} ft`,
+        ].filter(Boolean).join("<br>"))
         .addTo(map);
     }
 
@@ -571,7 +577,9 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       <div className="route-map" ref={mapRef} />
       <div className="map-telemetry">
         <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
+        {flight.aircraftPosition?.callsign && <span>Callsign: {flight.aircraftPosition.callsign}</span>}
         <span>Altitude: {flight.altitudeFt ? `${flight.altitudeFt.toLocaleString()} ft` : "Unavailable"}</span>
+        {typeof flight.aircraftPosition?.crossTrackMiles === "number" && <span>Route offset: {flight.aircraftPosition.crossTrackMiles} mi</span>}
         {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
       </div>
       <p className="source-line">Route, status, and progress source: {flight.dataSource}</p>

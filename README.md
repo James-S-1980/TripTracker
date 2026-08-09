@@ -2,7 +2,7 @@
 
 TripTracker is a React flight monitoring app for tracking upcoming and active trips. It accepts airline, flight number, and date, then presents gate, status, departure, arrival, enroute, route map, change alerts, and airport weather information.
 
-The current flight data provider is a deterministic mock shaped behind `src/flightProvider.ts` so a live aviation data API can be added without changing the dashboard UI. Weather uses the public Open-Meteo forecast API by airport coordinates.
+Flight data is served through the local API proxy so provider keys and scraping logic stay off the browser. Weather uses the public Open-Meteo forecast API by airport coordinates.
 
 ## Run locally
 
@@ -34,7 +34,9 @@ Lookup order:
 
 TripTracker no longer falls back to demo data. If neither live source returns parseable flight information, the app shows a lookup error instead of inventing route, gate, or status values.
 
-FlightAware-backed lookups can include live aircraft position and track data. Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude, so TripTracker labels those aircraft map markers as estimated from schedule.
+FlightAware-backed lookups can include live aircraft position and track data. TripTracker also enriches active in-flight results with Airplanes.live ADS-B data by sampling the route corridor and matching the aircraft callsign, which gives the moving map fresher latitude, longitude, heading, altitude, and speed when the flight is visible in ADS-B coverage.
+
+Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude. When no FlightAware or ADS-B position is available, TripTracker labels the aircraft map marker as estimated from schedule.
 
 ## Build
 

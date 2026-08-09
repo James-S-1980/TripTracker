@@ -43,7 +43,12 @@ export type AircraftPosition = {
   groundSpeedMph?: number;
   headingDeg?: number;
   timestamp?: string;
-  source: "FlightAware live position" | "FlightAware track" | "Estimated from schedule";
+  source: "FlightAware live position" | "FlightAware track" | "Airplanes.live ADS-B" | "Estimated from schedule";
+  callsign?: string;
+  aircraftHex?: string;
+  tailNumber?: string;
+  seenPositionSeconds?: number;
+  crossTrackMiles?: number;
 };
 
 export type FlightAlert = {

@@ -7,7 +7,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
+const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
+const milesToNauticalMiles = 0.868976;
+const earthRadiusMiles = 3958.7613;
+const adsbCacheMs = 30000;
+const adsbMaxRadiusNm = 250;
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
+const adsbPointCache = new Map();
 
 const airlineIcaoByIata = {
   AA: "AAL",
@@ -157,6 +163,41 @@ async function enrichFlightAwarePosition(mappedFlight, apiKey) {
   };
 }
 
+async function enrichAdsbPosition(mappedFlight, requestedIdent) {
+  if (!isTrackableInFlight(mappedFlight)) {
+    return mappedFlight;
+  }
+
+  const identifiers = callsignCandidates(mappedFlight, requestedIdent);
+  if (identifiers.length === 0) {
+    return mappedFlight;
+  }
+
+  const searchPoints = routeSearchPoints(mappedFlight.origin, mappedFlight.destination);
+  const aircraftLists = await Promise.all(
+    searchPoints.map((point) => fetchAirplanesLivePoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
+  );
+  const aircraft = dedupeAircraft(aircraftLists.flat());
+  const match = bestAdsbMatch(aircraft, identifiers, mappedFlight);
+  if (!match) {
+    return mappedFlight;
+  }
+
+  const source = "Airplanes.live ADS-B";
+  const dataSource = mappedFlight.dataSource.includes(source)
+    ? mappedFlight.dataSource
+    : `${mappedFlight.dataSource} + ${source}`;
+
+  return {
+    ...mappedFlight,
+    aircraftPosition: match,
+    altitudeFt: match.altitudeFt ?? mappedFlight.altitudeFt,
+    groundSpeedMph: match.groundSpeedMph ?? mappedFlight.groundSpeedMph,
+    lastUpdated: new Date().toISOString(),
+    dataSource,
+  };
+}
+
 async function fetchFlightAwarePosition(faFlightId, apiKey) {
   const response = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(faFlightId)}/position`, {
     headers: { "x-apikey": apiKey },
@@ -196,6 +237,156 @@ function mapFlightAwarePosition(position, source) {
   };
 }
 
+function isTrackableInFlight(flight) {
+  return flight.status === "En Route" || flight.progress > 0 && flight.progress < 100;
+}
+
+function callsignCandidates(flight, requestedIdent) {
+  const values = new Set();
+  const compactFlight = compactIdent(flight.flightNumber);
+  const [, , flightDigits = ""] = compactFlight.match(/^([A-Z0-9]{2,3})(\d+)$/) ?? [];
+  for (const value of [requestedIdent, compactFlight]) {
+    if (value) values.add(compactIdent(value));
+  }
+  const airlineCode = normalizeAirlineCode(String(flight.airlineCode ?? ""));
+  const airlineIcao = airlineIcaoByIata[airlineCode] ?? airlineCode;
+  if (airlineIcao && flightDigits) values.add(`${airlineIcao}${flightDigits}`);
+  if (airlineCode && flightDigits) values.add(`${airlineCode}${flightDigits}`);
+  return [...values].filter(Boolean);
+}
+
+function compactIdent(value) {
+  return String(value ?? "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+}
+
+function routeSearchPoints(origin, destination) {
+  const distance = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
+  if (!Number.isFinite(distance) || distance <= 0) return [];
+  const segments = Math.max(1, Math.min(7, Math.ceil(distance / 420)));
+  const radiusMiles = distance / segments / 2 + 80;
+  const radiusNm = Math.min(adsbMaxRadiusNm, Math.max(120, Math.ceil(radiusMiles * milesToNauticalMiles)));
+  return Array.from({ length: segments + 1 }, (_, index) => {
+    const fraction = index / segments;
+    const point = interpolateGreatCircle(origin, destination, fraction);
+    return { lat: point.lat, lon: point.lon, radiusNm };
+  });
+}
+
+async function fetchAirplanesLivePoint(lat, lon, radiusNm) {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${Math.round(radiusNm)}`;
+  const cached = adsbPointCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.fetchedAt < adsbCacheMs) {
+    return cached.aircraft;
+  }
+
+  const url = `${airplanesLiveBaseUrl}/point/${lat.toFixed(5)}/${lon.toFixed(5)}/${radiusNm.toFixed(2)}`;
+  const response = await fetch(url, { headers: browserHeaders() });
+  if (!response.ok) {
+    throw new Error(`Airplanes.live returned ${response.status}.`);
+  }
+  const payload = await response.json();
+  const aircraft = Array.isArray(payload.ac) ? payload.ac : [];
+  adsbPointCache.set(key, { fetchedAt: now, aircraft });
+  pruneAdsbCache(now);
+  return aircraft;
+}
+
+function pruneAdsbCache(now) {
+  for (const [key, value] of adsbPointCache.entries()) {
+    if (now - value.fetchedAt > adsbCacheMs * 4) {
+      adsbPointCache.delete(key);
+    }
+  }
+}
+
+function dedupeAircraft(aircraft) {
+  const byKey = new Map();
+  for (const item of aircraft) {
+    const key = item.hex ?? item.r ?? cleanAdsbCallsign(item) ?? JSON.stringify([item.lat, item.lon]);
+    const existing = byKey.get(key);
+    if (!existing || Number(item.seen_pos ?? item.seen ?? 999) < Number(existing.seen_pos ?? existing.seen ?? 999)) {
+      byKey.set(key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function bestAdsbMatch(aircraft, identifiers, flight) {
+  const identifierSet = new Set(identifiers.map(compactIdent));
+  let best = null;
+  for (const item of aircraft) {
+    const callsign = cleanAdsbCallsign(item);
+    if (!callsign || !identifierSet.has(callsign)) continue;
+    const lat = Number(item.lat);
+    const lon = Number(item.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const crossTrack = crossTrackMiles(flight.origin, flight.destination, { lat, lon });
+    if (!Number.isFinite(crossTrack) || crossTrack > 250) continue;
+    const seenPositionSeconds = Number(item.seen_pos ?? item.seen ?? 0);
+    const altitude = item.alt_baro ?? item.alt_geom;
+    const altitudeFt = normalizeAdsbAltitude(altitude);
+    const groundSpeedMph = Number.isFinite(Number(item.gs)) ? Math.round(Number(item.gs) * 1.15078) : undefined;
+    const score = crossTrack + Math.max(0, seenPositionSeconds) / 4;
+    const candidate = {
+      lat,
+      lon,
+      altitudeFt,
+      groundSpeedMph,
+      headingDeg: Number(item.track),
+      timestamp: new Date(Date.now() - Math.max(0, seenPositionSeconds) * 1000).toISOString(),
+      source: "Airplanes.live ADS-B",
+      callsign,
+      aircraftHex: item.hex ?? undefined,
+      tailNumber: item.r ?? undefined,
+      seenPositionSeconds: Number.isFinite(seenPositionSeconds) ? seenPositionSeconds : undefined,
+      crossTrackMiles: Math.round(crossTrack),
+      score,
+    };
+    if (!best || candidate.score < best.score) {
+      best = candidate;
+    }
+  }
+  if (!best) return null;
+  const { score, ...position } = best;
+  return position;
+}
+
+function cleanAdsbCallsign(aircraft) {
+  return compactIdent(aircraft.flight ?? aircraft.call ?? "");
+}
+
+function normalizeAdsbAltitude(value) {
+  if (value === "ground") return 0;
+  const altitude = Number(value);
+  return Number.isFinite(altitude) ? Math.round(altitude) : 0;
+}
+
+function haversineMiles(latA, lonA, latB, lonB) {
+  const dLat = toRadians(latB - latA);
+  const dLon = toRadians(lonB - lonA);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) * Math.sin(dLon / 2) ** 2;
+  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function crossTrackMiles(origin, destination, point) {
+  const startToPoint = haversineMiles(origin.lat, origin.lon, point.lat, point.lon) / earthRadiusMiles;
+  const bearingStartToPoint = bearingRadians(origin.lat, origin.lon, point.lat, point.lon);
+  const bearingStartToEnd = bearingRadians(origin.lat, origin.lon, destination.lat, destination.lon);
+  return Math.abs(Math.asin(Math.sin(startToPoint) * Math.sin(bearingStartToPoint - bearingStartToEnd)) * earthRadiusMiles);
+}
+
+function bearingRadians(latA, lonA, latB, lonB) {
+  const phi1 = toRadians(latA);
+  const phi2 = toRadians(latB);
+  const lambda = toRadians(lonB - lonA);
+  return Math.atan2(
+    Math.sin(lambda) * Math.cos(phi2),
+    Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(lambda),
+  );
+}
+
 function chooseFlight(flights, requestedDate) {
   const target = requestedDate.slice(0, 10);
   return flights.find((flight) => (
@@ -216,7 +407,7 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
     return null;
   });
   if (flightAwareFlight) {
-    response.json(flightAwareFlight);
+    response.json(await enrichAdsbPosition(flightAwareFlight, ident));
     return;
   }
 
@@ -225,7 +416,7 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
     return null;
   });
   if (webFlight) {
-    response.json(webFlight);
+    response.json(await enrichAdsbPosition(webFlight, ident));
     return;
   }
 
