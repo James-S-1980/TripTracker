@@ -27,6 +27,7 @@ export type FlightLeg = {
   altitudeFt: number;
   groundSpeedMph: number;
   lastUpdated: string;
+  dataSource: string;
   alerts: FlightAlert[];
 };
 

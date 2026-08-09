@@ -269,6 +269,10 @@ export function App() {
                   <small>Arrival gate</small>
                   <strong>T{activeFlight.arrivalTerminal} / {activeFlight.arrivalGate}</strong>
                 </div>
+                <div className="provider-note">
+                  <small>Data source</small>
+                  <strong>{activeFlight.dataSource ?? "Simulated demo provider"}</strong>
+                </div>
               </section>
 
               <div className="summary-strip">

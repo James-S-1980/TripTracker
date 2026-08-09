@@ -364,8 +364,19 @@ dt,
   border-radius: 8px;
   display: grid;
   gap: 14px;
-  grid-template-columns: 1fr 1.5fr 1fr 1fr;
+  grid-template-columns: 1fr 1.45fr 1fr 1fr;
   padding: 16px;
+}
+
+.provider-note {
+  border-top: 1px solid #d9e4df;
+  grid-column: 1 / -1;
+  padding-top: 12px;
+}
+
+.provider-note strong {
+  color: #476159;
+  font-size: 0.95rem;
 }
 
 .flight-brief div {
