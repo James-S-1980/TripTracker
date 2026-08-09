@@ -539,7 +539,7 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
     terminal: gates[0]?.[1] ?? "TBD",
     arrivalTerminal: gates[1]?.[1] ?? "TBD",
     status,
-    progress: status === "Arrived" ? 100 : status === "En Route" ? 70 : 0,
+    progress: progressFromTimes(status, times.departureTime, times.arrivalTime),
     altitudeFt: 0,
     groundSpeedMph: 0,
     aircraftPosition: estimatedPosition(origin, destination, status, times.departureTime, times.arrivalTime),
@@ -585,8 +585,10 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     throw new Error("FlightStats page did not expose usable departure and arrival times.");
   }
 
-  const departureTime = wallTimeToUtcIso(date, departureTimeText, origin.timeZone);
-  const arrivalTime = wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone);
+  const times = normalizeFlightTimeRange(
+    wallTimeToUtcIso(date, departureTimeText, origin.timeZone),
+    wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone),
+  );
   const altitudeText = text.match(/ALTITUDE\s+(\d+)\s*ft/i)?.[1];
   const speedText = text.match(/Speed\s+(\d+)\s+kts/i)?.[1];
   const altitudeFt = Number(altitudeText ?? 0);
@@ -601,17 +603,17 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     date,
     origin,
     destination,
-    departureTime,
-    arrivalTime,
+    departureTime: times.departureTime,
+    arrivalTime: times.arrivalTime,
     boardingGate: gates[0]?.[2] ?? "TBD",
     arrivalGate: gates[1]?.[2] ?? "TBD",
     terminal: gates[0]?.[1] ?? "TBD",
     arrivalTerminal: gates[1]?.[1] ?? "TBD",
     status,
-    progress: progressFromTimes(status, departureTime, arrivalTime),
+    progress: progressFromTimes(status, times.departureTime, times.arrivalTime),
     altitudeFt,
     groundSpeedMph: speedMph,
-    aircraftPosition: estimatedPosition(origin, destination, status, departureTime, arrivalTime, altitudeFt, speedMph),
+    aircraftPosition: estimatedPosition(origin, destination, status, times.departureTime, times.arrivalTime, altitudeFt, speedMph),
     lastUpdated: new Date().toISOString(),
     dataSource: "FlightStats public page, powered by Cirium",
     sourceUrl,
@@ -759,9 +761,21 @@ function findFlightTimes(text, date, originTimeZone, destinationTimeZone) {
   const landed = text.match(/\b(?:Landed|Arrived|Arrival)\s+(\d{1,2}:\d{2}\s*[AP]M)\b/i)?.[1];
   const genericTimes = [...text.matchAll(/\b(\d{1,2}:\d{2}\s*[AP]M)\b/gi)].map((match) => match[1]);
 
+  return normalizeFlightTimeRange(
+    wallTimeToUtcIso(date, departed ?? genericTimes[0] ?? "12:00 PM", originTimeZone),
+    wallTimeToUtcIso(date, landed ?? genericTimes[1] ?? genericTimes[0] ?? "12:00 PM", destinationTimeZone),
+  );
+}
+
+function normalizeFlightTimeRange(departureTime, arrivalTime) {
+  const departure = new Date(departureTime);
+  const arrival = new Date(arrivalTime);
+  if (Number.isFinite(departure.getTime()) && Number.isFinite(arrival.getTime()) && arrival <= departure) {
+    arrival.setUTCDate(arrival.getUTCDate() + 1);
+  }
   return {
-    departureTime: wallTimeToUtcIso(date, departed ?? genericTimes[0] ?? "12:00 PM", originTimeZone),
-    arrivalTime: wallTimeToUtcIso(date, landed ?? genericTimes[1] ?? genericTimes[0] ?? "12:00 PM", destinationTimeZone),
+    departureTime: departure.toISOString(),
+    arrivalTime: arrival.toISOString(),
   };
 }
 
