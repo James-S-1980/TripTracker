@@ -17,8 +17,10 @@ export type FlightLeg = {
   destination: Airport;
   departureTime: string;
   arrivalTime: string;
-  gate: string;
+  boardingGate: string;
+  arrivalGate: string;
   terminal: string;
+  arrivalTerminal: string;
   status: FlightStatus;
   progress: number;
   altitudeFt: number;

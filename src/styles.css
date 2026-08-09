@@ -95,6 +95,57 @@ h1 {
   padding: 16px;
 }
 
+.smart-field {
+  position: relative;
+}
+
+.smart-field input {
+  width: 100%;
+}
+
+.suggestions {
+  background: #ffffff;
+  border: 1px solid #c8d6d1;
+  border-radius: 8px;
+  box-shadow: 0 14px 30px rgba(23, 32, 42, 0.12);
+  display: grid;
+  gap: 2px;
+  left: 0;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+}
+
+.suggestions button {
+  background: transparent;
+  color: #17202a;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  justify-content: start;
+  min-height: 38px;
+  padding: 8px;
+  text-align: left;
+}
+
+.suggestions button:hover {
+  background: #eef5f2;
+}
+
+.suggestions span {
+  color: #60756f;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestions.compact button {
+  grid-template-columns: 70px minmax(0, 1fr);
+}
+
 label {
   color: #476159;
   display: grid;
@@ -143,16 +194,61 @@ button:disabled {
   margin: 0;
 }
 
-.alert-list {
+.timeline {
+  display: grid;
+  gap: 0;
+  margin-top: 10px;
+}
+
+.timeline-item {
   display: grid;
   gap: 10px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  padding-bottom: 16px;
+  position: relative;
 }
 
-.alert {
-  padding: 14px;
+.timeline-item::before {
+  background: #d9e4df;
+  bottom: 0;
+  content: "";
+  left: 14px;
+  position: absolute;
+  top: 30px;
+  width: 2px;
 }
 
-.alert span {
+.timeline-item:last-child::before {
+  display: none;
+}
+
+.timeline-marker {
+  align-items: center;
+  background: #e9f4f1;
+  border: 2px solid #0f766e;
+  border-radius: 999px;
+  color: #0f766e;
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+
+.timeline-item.critical .timeline-marker {
+  background: #fff0ed;
+  border-color: #b42318;
+  color: #b42318;
+}
+
+.timeline-meta {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.timeline-meta span {
   color: #8a5a00;
   display: block;
   font-size: 0.72rem;
@@ -160,24 +256,53 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.alert.critical {
-  border-color: #f5b5a8;
-}
-
-.alert.critical span {
+.timeline-item.critical .timeline-meta span {
   color: #b42318;
 }
 
-.alert p {
+.timeline-item p {
   color: #476159;
   margin: 6px 0;
 }
 
-.alert small,
+.timeline-meta small,
 .metric small,
 dt,
 .flight-header p {
   color: #60756f;
+}
+
+.monitored-heading {
+  margin-top: 10px;
+}
+
+.tracked-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tracked-list button {
+  background: #ffffff;
+  border: 1px solid #d9e4df;
+  color: #17202a;
+  display: grid;
+  gap: 2px;
+  justify-content: start;
+  min-height: 54px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.tracked-list button.active {
+  border-color: #0f766e;
+  box-shadow: inset 4px 0 0 #0f766e;
+}
+
+.tracked-list span {
+  color: #60756f;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .dashboard {
@@ -206,6 +331,42 @@ dt,
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.flight-brief {
+  background: #ffffff;
+  border: 1px solid #d9e4df;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr 1.5fr 1fr 1fr;
+  padding: 16px;
+}
+
+.flight-brief div {
+  min-width: 0;
+}
+
+.flight-brief small {
+  color: #60756f;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.flight-brief strong {
+  display: block;
+  font-size: 1.15rem;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.flight-brief span {
+  color: #60756f;
+  display: block;
+  font-weight: 700;
+  margin-top: 2px;
 }
 
 .detail-grid {
@@ -246,15 +407,29 @@ dt,
 }
 
 .map-panel rect {
-  fill: #11212b;
+  fill: #dbeaf0;
 }
 
-.grid-line {
+.basemap path {
+  fill: #d8e4d4;
+  opacity: 0.95;
+  stroke: #b7c9b1;
+  stroke-width: 1.5;
+}
+
+.map-lines {
   fill: none;
-  opacity: 0.25;
-  stroke: #d9e4df;
-  stroke-dasharray: 8 12;
-  stroke-width: 3;
+  opacity: 0.34;
+  stroke: #7b9baa;
+  stroke-width: 1;
+}
+
+.route-shadow {
+  fill: none;
+  opacity: 0.26;
+  stroke: #17202a;
+  stroke-linecap: round;
+  stroke-width: 10;
 }
 
 .route {
@@ -279,13 +454,13 @@ dt,
 }
 
 svg text {
-  fill: #ffffff;
+  fill: #17202a;
   font-size: 30px;
   font-weight: 900;
 }
 
 svg text.city {
-  fill: #b4c2bd;
+  fill: #476159;
   font-size: 15px;
   font-weight: 700;
 }
@@ -341,6 +516,7 @@ dd {
 
   .tracker-grid,
   .summary-strip,
+  .flight-brief,
   .detail-grid {
     grid-template-columns: 1fr;
   }
