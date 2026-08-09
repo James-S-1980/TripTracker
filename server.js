@@ -50,6 +50,7 @@ const airportCatalog = {
   PHX: { code: "PHX", name: "Phoenix Sky Harbor International", city: "Phoenix", lat: 33.4352, lon: -112.0101, timeZone: "America/Phoenix" },
   SEA: { code: "SEA", name: "Seattle-Tacoma International", city: "Seattle", lat: 47.4502, lon: -122.3088, timeZone: "America/Los_Angeles" },
   SFO: { code: "SFO", name: "San Francisco International", city: "San Francisco", lat: 37.6213, lon: -122.379, timeZone: "America/Los_Angeles" },
+  XNA: { code: "XNA", name: "Northwest Arkansas National Airport", city: "Bentonville", lat: 36.2819, lon: -94.3068, timeZone: "America/Chicago" },
 };
 
 function addDays(date, days) {
@@ -285,15 +286,12 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
     throw new Error("Web search did not expose a parseable flight-card route.");
   }
 
-  const origin = airportCatalog[route.origin];
-  const destination = airportCatalog[route.destination];
-  if (!origin || !destination) {
-    throw new Error(`Web search route ${route.origin}-${route.destination} uses airports not in the local catalog yet.`);
-  }
+  const origin = airportForRouteCode(route.origin, text);
+  const destination = airportForRouteCode(route.destination, text);
 
   const status = findStatus(text);
   const times = findFlightTimes(text, date, origin.timeZone, destination.timeZone);
-  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9]+)/gi)];
   const updated = text.match(/Updated\s+([^.;]+?)(?:\s+·|\s+-|\s+Cirium|\s*$)/i)?.[1]?.trim();
 
   return {
@@ -338,11 +336,8 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     throw new Error("FlightStats page did not expose a parseable route.");
   }
 
-  const origin = airportCatalog[route.origin];
-  const destination = airportCatalog[route.destination];
-  if (!origin || !destination) {
-    throw new Error(`FlightStats route ${route.origin}-${route.destination} uses airports not in the local catalog yet.`);
-  }
+  const origin = airportForRouteCode(route.origin, text);
+  const destination = airportForRouteCode(route.destination, text);
 
   const status = findStatus(text);
   const departureTimeText =
@@ -353,7 +348,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     text.match(/Flight Arrival Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Estimated\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
-  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9]+)\s+Gate\s+([A-Z0-9]+)/gi)];
+  const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9]+)/gi)];
   const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
 
   if (!departureTimeText || !arrivalTimeText) {
@@ -436,6 +431,22 @@ function findRoute(text) {
     .filter((code) => airportCatalog[code]);
   const uniqueCodes = [...new Set(codes)];
   return uniqueCodes.length >= 2 ? { origin: uniqueCodes[0], destination: uniqueCodes[1] } : null;
+}
+
+function airportForRouteCode(code, text) {
+  const known = airportCatalog[code];
+  if (known) return known;
+
+  const airportPattern = new RegExp(`${code}\\s+([^,]+),\\s*([A-Z]{2}),\\s*US\\s+([^]*? Airport)`, "i");
+  const match = text.match(airportPattern);
+  return {
+    code,
+    name: match?.[3]?.trim() ?? `${code} Airport`,
+    city: match?.[1]?.trim() ?? code,
+    lat: 0,
+    lon: 0,
+    timeZone: "America/New_York",
+  };
 }
 
 function findStatus(text) {

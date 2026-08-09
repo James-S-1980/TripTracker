@@ -17,6 +17,7 @@ export const airports: Airport[] = [
   { code: "PHX", name: "Phoenix Sky Harbor International", city: "Phoenix", lat: 33.4352, lon: -112.0101, timeZone: "America/Phoenix" },
   { code: "SEA", name: "Seattle-Tacoma International", city: "Seattle", lat: 47.4502, lon: -122.3088, timeZone: "America/Los_Angeles" },
   { code: "SFO", name: "San Francisco International", city: "San Francisco", lat: 37.6213, lon: -122.379, timeZone: "America/Los_Angeles" },
+  { code: "XNA", name: "Northwest Arkansas National Airport", city: "Bentonville", lat: 36.2819, lon: -94.3068, timeZone: "America/Chicago" },
 ];
 
 export function findAirport(code: string): Airport | undefined {
