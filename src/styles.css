@@ -928,10 +928,9 @@ dt,
 
 .aircraft-map-marker span {
   align-items: center;
-  background: #ffffff;
-  border: 2px solid var(--teal);
-  border-radius: 50%;
-  box-shadow: 0 8px 18px rgba(23, 32, 42, 0.24);
+  background: transparent;
+  border: 0;
+  filter: drop-shadow(0 3px 5px rgba(23, 32, 42, 0.34));
   color: var(--teal);
   display: flex;
   height: 38px;
@@ -940,7 +939,6 @@ dt,
 }
 
 .aircraft-map-marker span.estimated {
-  border-color: var(--amber);
   color: var(--amber);
 }
 
