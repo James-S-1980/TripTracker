@@ -461,34 +461,44 @@ async function lookupFlightAware(ident, date) {
 }
 
 async function lookupWebFlight(ident, airline, flightNumber, date) {
-  const query = `${ident} ${airline} ${flightNumber} flight status ${date}`;
-  const url = `https://www.google.com/search?${new URLSearchParams({ q: query, hl: "en" }).toString()}`;
   const errors = [];
+  const candidateDates = webLookupDates(date);
 
-  try {
-    const searchResponse = await fetch(url, { headers: browserHeaders() });
-    if (!searchResponse.ok) {
-      throw new Error(`Google flight search returned ${searchResponse.status}.`);
+  for (const lookupDate of candidateDates) {
+    const query = `${ident} ${airline} ${flightNumber} flight status ${lookupDate}`;
+    const url = `https://www.google.com/search?${new URLSearchParams({ q: query, hl: "en" }).toString()}`;
+    try {
+      const searchResponse = await fetch(url, { headers: browserHeaders() });
+      if (!searchResponse.ok) {
+        throw new Error(`Google flight search returned ${searchResponse.status}.`);
+      }
+      const html = await searchResponse.text();
+      return parseGoogleFlightCard(html, ident, airline, flightNumber, lookupDate, url);
+    } catch (error) {
+      errors.push(error instanceof Error ? `Google ${lookupDate}: ${error.message}` : `Google ${lookupDate}: flight card parse failed.`);
     }
-    const html = await searchResponse.text();
-    return parseGoogleFlightCard(html, ident, airline, flightNumber, date, url);
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "Google flight card parse failed.");
   }
 
-  try {
-    const flightStatsUrl = flightStatsUrlFor(airline, flightNumber, date);
-    const flightStatsResponse = await fetch(flightStatsUrl, { headers: browserHeaders() });
-    if (!flightStatsResponse.ok) {
-      throw new Error(`FlightStats returned ${flightStatsResponse.status}.`);
+  for (const lookupDate of candidateDates) {
+    try {
+      const flightStatsUrl = flightStatsUrlFor(airline, flightNumber, lookupDate);
+      const flightStatsResponse = await fetch(flightStatsUrl, { headers: browserHeaders() });
+      if (!flightStatsResponse.ok) {
+        throw new Error(`FlightStats returned ${flightStatsResponse.status}.`);
+      }
+      const html = await flightStatsResponse.text();
+      return parseFlightStatsPage(html, ident, airline, flightNumber, lookupDate, flightStatsUrl);
+    } catch (error) {
+      errors.push(error instanceof Error ? `FlightStats ${lookupDate}: ${error.message}` : `FlightStats ${lookupDate}: parse failed.`);
     }
-    const html = await flightStatsResponse.text();
-    return parseFlightStatsPage(html, ident, airline, flightNumber, date, flightStatsUrl);
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : "FlightStats parse failed.");
   }
 
   throw new Error(errors.join(" "));
+}
+
+function webLookupDates(date) {
+  const previousDate = addDays(date, -1).slice(0, 10);
+  return previousDate === date ? [date] : [date, previousDate];
 }
 
 function browserHeaders() {
@@ -697,6 +707,7 @@ function plainText(html) {
 
 function decodeHtml(value) {
   return value
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
     .replace(/&amp;/g, "&")
     .replace(/&nbsp;/g, " ")
     .replace(/&#39;/g, "'")
