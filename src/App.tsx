@@ -328,6 +328,40 @@ export function App() {
         </div>
       </section>
 
+      {flights.length > 0 && (
+        <section className="top-flight-switcher" aria-label="Tracked flights">
+          <div className="section-heading">
+            <Plane size={18} />
+            <h2>Tracked Flights</h2>
+          </div>
+          <div className="tracked-list">
+            {flights.map((flight) => (
+              <div className={`tracked-flight ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
+                <button onClick={() => setActiveId(flight.id)} type="button">
+                  <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
+                  <span className="tracked-copy">
+                    <strong>{flight.flightNumber}</strong>
+                    <span>{flight.origin.code} to {flight.destination.code}</span>
+                    <em>{flight.status}</em>
+                  </span>
+                </button>
+                <button
+                  aria-label={`Delete ${flight.flightNumber}`}
+                  className="delete-flight"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    deleteFlight(flight.id);
+                  }}
+                  type="button"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className={`tracker-grid ${activeFlight ? "has-active-flight" : ""}`}>
         <aside className="sidebar">
           <form className="lookup-panel" onSubmit={addFlight}>
@@ -414,35 +448,6 @@ export function App() {
             ))}
           </div>
 
-          <div className="section-heading monitored-heading">
-            <Plane size={18} />
-            <h2>Tracked Flights</h2>
-          </div>
-          <div className="tracked-list">
-            {flights.map((flight) => (
-              <div className={`tracked-flight ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
-                <button onClick={() => setActiveId(flight.id)} type="button">
-                  <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
-                  <span className="tracked-copy">
-                    <strong>{flight.flightNumber}</strong>
-                    <span>{flight.origin.code} to {flight.destination.code}</span>
-                    <em>Source: {flight.dataSource}</em>
-                  </span>
-                </button>
-                <button
-                  aria-label={`Delete ${flight.flightNumber}`}
-                  className="delete-flight"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    deleteFlight(flight.id);
-                  }}
-                  type="button"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
         </aside>
 
         <section className="dashboard">
