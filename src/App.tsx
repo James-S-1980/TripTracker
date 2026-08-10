@@ -714,7 +714,6 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
         {flight.aircraftPosition?.callsign && <span>Callsign: {flight.aircraftPosition.callsign}</span>}
         <span>Altitude: {flight.altitudeFt ? `${flight.altitudeFt.toLocaleString()} ft` : "Unavailable"}</span>
-        {typeof flight.aircraftPosition?.crossTrackMiles === "number" && <span>Route offset: {flight.aircraftPosition.crossTrackMiles} mi</span>}
         {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
       </div>
       <p className="source-line">Route, status, and progress source: {flight.dataSource}</p>
