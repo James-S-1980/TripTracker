@@ -675,9 +675,15 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       L.marker(aircraftPoint, {
         icon: L.divIcon({
           className: "aircraft-map-marker",
-          html: `<span class="${live ? "live" : "estimated"}"${heading}>&#9992;</span>`,
-          iconAnchor: [16, 16],
-          iconSize: [32, 32],
+          html: `
+            <span class="${live ? "live" : "estimated"}">
+              <svg class="aircraft-symbol" viewBox="0 0 32 32" aria-hidden="true"${heading}>
+                <path d="M16 2.5c.9 0 1.5.7 1.5 1.6v7.5l11 5.8v2.7l-11-2.9v6.2l4.1 3v2.2L16 27l-5.6 1.6v-2.2l4.1-3v-6.2l-11 2.9v-2.7l11-5.8V4.1c0-.9.6-1.6 1.5-1.6Z" />
+              </svg>
+            </span>
+          `,
+          iconAnchor: [19, 19],
+          iconSize: [38, 38],
         }),
       })
         .bindPopup([
