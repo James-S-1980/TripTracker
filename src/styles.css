@@ -896,6 +896,36 @@ dt,
   padding: 2px 2px 12px;
 }
 
+.map-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.radar-toggle {
+  align-items: center;
+  background: #f8fbfa;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  text-transform: uppercase;
+}
+
+.radar-toggle.active {
+  background: rgba(15, 118, 110, 0.12);
+  border-color: rgba(15, 118, 110, 0.32);
+  color: var(--teal);
+}
+
 .map-toolbar div {
   display: grid;
   gap: 2px;

@@ -9,9 +9,18 @@ import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
 const refreshIntervalMs = 30000;
+const rainViewerApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
 
 type SoundEventType = "takeoff" | "landing" | "gate";
 type AudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
+type RainViewerFrame = { time: number; path: string };
+type RainViewerResponse = {
+  generated?: number;
+  host?: string;
+  radar?: {
+    past?: RainViewerFrame[];
+  };
+};
 
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
@@ -42,6 +51,14 @@ function formatTimestamp(value: string | null): string {
     minute: "2-digit",
     second: "2-digit",
   }).format(new Date(value));
+}
+
+function formatRadarTimestamp(value: number | null): string {
+  if (!value) return "Unavailable";
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value * 1000));
 }
 
 function durationText(ms: number): string {
@@ -625,6 +642,10 @@ function WeatherCard({ title, code, weather }: { title: string; code: string; we
 function FlightMap({ flight }: { flight: FlightLeg }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
+  const radarLayerRef = useRef<L.TileLayer | null>(null);
+  const [radarEnabled, setRadarEnabled] = useState(true);
+  const [radarFrame, setRadarFrame] = useState<{ generated: number | null; tileUrl: string } | null>(null);
+  const [radarError, setRadarError] = useState<string | null>(null);
   const routePoints = useMemo(() => {
     if (flight.track && flight.track.length > 1) {
       return flight.track.map((point) => [point.lat, point.lon] as L.LatLngTuple);
@@ -637,12 +658,57 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
   }, [flight]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadRadarFrame() {
+      try {
+        const response = await fetch(rainViewerApiUrl);
+        if (!response.ok) {
+          throw new Error(`RainViewer returned ${response.status}.`);
+        }
+        const payload = await response.json() as RainViewerResponse;
+        const latestFrame = payload.radar?.past?.at(-1);
+        if (!payload.host || !latestFrame?.path) {
+          throw new Error("RainViewer did not include a current radar frame.");
+        }
+        if (!cancelled) {
+          setRadarFrame({
+            generated: payload.generated ?? latestFrame.time ?? null,
+            tileUrl: `${payload.host}${latestFrame.path}/512/{z}/{x}/{y}/2/1_1.png`,
+          });
+          setRadarError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setRadarError(error instanceof Error ? error.message : "Radar unavailable.");
+        }
+      }
+    }
+
+    void loadRadarFrame();
+    const intervalId = window.setInterval(() => {
+      void loadRadarFrame();
+    }, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!mapRef.current) return;
     if (!leafletMapRef.current) {
       leafletMapRef.current = L.map(mapRef.current, {
         attributionControl: true,
         scrollWheelZoom: false,
       });
+      leafletMapRef.current.createPane("radarPane");
+      const radarPane = leafletMapRef.current.getPane("radarPane");
+      if (radarPane) {
+        radarPane.style.zIndex = "350";
+        radarPane.style.pointerEvents = "none";
+      }
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
         maxZoom: 10,
@@ -700,6 +766,28 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     window.setTimeout(() => map.invalidateSize(), 0);
   }, [flight, routePoints]);
 
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    if (radarLayerRef.current) {
+      radarLayerRef.current.removeFrom(map);
+      radarLayerRef.current = null;
+    }
+
+    if (!radarEnabled || !radarFrame) return;
+
+    radarLayerRef.current = L.tileLayer(radarFrame.tileUrl, {
+      attribution: "Radar: RainViewer",
+      className: "weather-radar-layer",
+      maxNativeZoom: 7,
+      maxZoom: 10,
+      opacity: 0.56,
+      pane: "radarPane",
+      zIndex: 320,
+    }).addTo(map);
+  }, [radarEnabled, radarFrame]);
+
   return (
     <section className="map-panel" aria-label="Flight route map">
       <div className="map-toolbar">
@@ -707,7 +795,19 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
           <small>Route map</small>
           <strong>{flight.origin.code} to {flight.destination.code}</strong>
         </div>
-        <span className="source-chip">{flight.dataSource}</span>
+        <div className="map-actions">
+          <button
+            aria-pressed={radarEnabled}
+            className={`radar-toggle ${radarEnabled ? "active" : ""}`}
+            onClick={() => setRadarEnabled((enabled) => !enabled)}
+            title="Toggle weather radar overlay"
+            type="button"
+          >
+            <Radar size={16} />
+            <span>Radar</span>
+          </button>
+          <span className="source-chip">{flight.dataSource}</span>
+        </div>
       </div>
       <div className="route-map" ref={mapRef} />
       <div className="map-telemetry">
@@ -715,8 +815,9 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         {flight.aircraftPosition?.callsign && <span>Callsign: {flight.aircraftPosition.callsign}</span>}
         <span>Altitude: {flight.altitudeFt ? `${flight.altitudeFt.toLocaleString()} ft` : "Unavailable"}</span>
         {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
+        <span>Radar: {radarError ? "Unavailable" : radarEnabled ? `On, ${formatRadarTimestamp(radarFrame?.generated ?? null)}` : "Off"}</span>
       </div>
-      <p className="source-line">Route, status, and progress source: {flight.dataSource}</p>
+      <p className="source-line">Route, status, and progress source: {flight.dataSource}. Weather radar source: RainViewer.</p>
     </section>
   );
 }
