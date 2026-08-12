@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+loadLocalEnvironment();
+
 const app = express();
 const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
@@ -18,6 +21,26 @@ const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
+
+function loadLocalEnvironment() {
+  const envPath = path.join(__dirname, ".env.local");
+  if (!fs.existsSync(envPath)) return;
+
+  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const rawValue = trimmed.slice(separatorIndex + 1).trim();
+    const value = rawValue.replace(/^['"]|['"]$/g, "");
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  }
+}
 
 const airlineIcaoByIata = {
   AA: "AAL",
@@ -494,6 +517,14 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
       detail: error instanceof Error ? error.message : "Unknown notification error.",
     });
   }
+});
+
+app.get(["/api/notifications/status", "/trip/api/notifications/status"], (request, response) => {
+  response.json({
+    configured: Boolean(smsAppPassword),
+    recipientConfigured: Boolean(smsRecipient),
+    senderConfigured: Boolean(smsFrom),
+  });
 });
 
 function normalizeAirlineCode(code) {
