@@ -736,8 +736,8 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         radarPane.style.zIndex = "350";
         radarPane.style.pointerEvents = "none";
       }
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
         maxZoom: 10,
       }).addTo(leafletMapRef.current);
     }
