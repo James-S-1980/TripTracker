@@ -683,6 +683,18 @@ async function lookupWebFlight(ident, airline, flightNumber, date) {
 
   for (const lookupDate of candidateDates) {
     try {
+      const flightAwarePublicFlight = await lookupFlightAwarePublic(ident, airline, flightNumber, lookupDate);
+      if (!flightAwarePublicFlight) {
+        throw new Error("FlightAware public page did not expose this flight.");
+      }
+      return flightAwarePublicFlight;
+    } catch (error) {
+      errors.push(error instanceof Error ? `FlightAware public ${lookupDate}: ${error.message}` : `FlightAware public ${lookupDate}: parse failed.`);
+    }
+  }
+
+  for (const lookupDate of candidateDates) {
+    try {
       const flightStatsUrl = flightStatsUrlFor(airline, flightNumber, lookupDate);
       const flightStatsResponse = await fetch(flightStatsUrl, { headers: browserHeaders() });
       if (!flightStatsResponse.ok) {
@@ -692,18 +704,6 @@ async function lookupWebFlight(ident, airline, flightNumber, date) {
       return parseFlightStatsPage(html, ident, airline, flightNumber, lookupDate, flightStatsUrl);
     } catch (error) {
       errors.push(error instanceof Error ? `FlightStats ${lookupDate}: ${error.message}` : `FlightStats ${lookupDate}: parse failed.`);
-    }
-  }
-
-  for (const lookupDate of candidateDates) {
-    try {
-      const flightAwarePublicFlight = await lookupFlightAwarePublic(ident, airline, flightNumber, lookupDate);
-      if (!flightAwarePublicFlight) {
-        throw new Error("FlightAware public page did not expose this flight.");
-      }
-      return flightAwarePublicFlight;
-    } catch (error) {
-      errors.push(error instanceof Error ? `FlightAware public ${lookupDate}: ${error.message}` : `FlightAware public ${lookupDate}: parse failed.`);
     }
   }
 
