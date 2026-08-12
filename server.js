@@ -444,7 +444,8 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
     return null;
   });
   if (flightAwareFlight) {
-    response.json(await enrichAdsbPosition(flightAwareFlight, ident));
+    const enrichedFlight = await enrichFlightAwarePublicMetadata(flightAwareFlight, ident).catch(() => flightAwareFlight);
+    response.json(await enrichAdsbPosition(enrichedFlight, ident));
     return;
   }
 
@@ -453,7 +454,8 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
     return null;
   });
   if (webFlight) {
-    response.json(await enrichAdsbPosition(webFlight, ident));
+    const enrichedFlight = await enrichFlightAwarePublicMetadata(webFlight, ident).catch(() => webFlight);
+    response.json(await enrichAdsbPosition(enrichedFlight, ident));
     return;
   }
 
@@ -526,6 +528,115 @@ async function lookupWebFlight(ident, airline, flightNumber, date) {
   }
 
   throw new Error(errors.join(" "));
+}
+
+async function enrichFlightAwarePublicMetadata(mappedFlight, ident) {
+  if (mappedFlight.inboundFrom && mappedFlight.tailNumber) {
+    return mappedFlight;
+  }
+
+  const publicFlight = await fetchFlightAwarePublicFlight(`https://www.flightaware.com/live/flight/${encodeURIComponent(ident)}`);
+  if (!publicFlight || !publicFlightMatches(publicFlight, mappedFlight, ident)) {
+    return mappedFlight;
+  }
+
+  const tailNumber = mappedFlight.tailNumber ?? usefulOptionalValue(publicFlight.aircraft?.tail);
+  const inboundLink = publicFlight.inboundFlight?.linkUrl;
+  if (!inboundLink || mappedFlight.inboundFrom) {
+    return {
+      ...mappedFlight,
+      tailNumber,
+    };
+  }
+
+  const inboundFlight = await fetchFlightAwarePublicFlight(new URL(inboundLink, "https://www.flightaware.com").toString()).catch(() => null);
+  const inboundDestinationCode = publicAirportCode(inboundFlight?.destination);
+  if (!inboundFlight || inboundDestinationCode !== mappedFlight.origin.code) {
+    return {
+      ...mappedFlight,
+      tailNumber,
+    };
+  }
+
+  const inboundFrom = airportFromPublicFlightAware(inboundFlight.origin);
+  if (!inboundFrom) {
+    return {
+      ...mappedFlight,
+      tailNumber,
+    };
+  }
+
+  return {
+    ...mappedFlight,
+    tailNumber,
+    inboundFrom,
+    inboundFlightNumber: flightNumberFromPublicIdent(inboundFlight.displayIdent ?? inboundFlight.ident),
+    inboundSource: "FlightAware public page",
+  };
+}
+
+async function fetchFlightAwarePublicFlight(url) {
+  const response = await fetch(url, { headers: browserHeaders() });
+  if (!response.ok) return null;
+  const html = await response.text();
+  const bootstrap = parseFlightAwareBootstrap(html);
+  const flights = Object.values(bootstrap?.flights ?? {});
+  return flights.find(Boolean) ?? null;
+}
+
+function parseFlightAwareBootstrap(html) {
+  const match = html.match(/var trackpollBootstrap = (\{[\s\S]*?\});\s*<\/script>/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function publicFlightMatches(publicFlight, mappedFlight, ident) {
+  const publicIdent = compactIdent(publicFlight.displayIdent ?? publicFlight.ident ?? "");
+  const requestedIdent = compactIdent(ident);
+  const publicOrigin = publicAirportCode(publicFlight.origin);
+  const publicDestination = publicAirportCode(publicFlight.destination);
+  return publicIdent === requestedIdent &&
+    publicOrigin === mappedFlight.origin.code &&
+    publicDestination === mappedFlight.destination.code;
+}
+
+function publicAirportCode(airport) {
+  return String(airport?.iata ?? airport?.altIdent ?? airport?.icao ?? "")
+    .replace(/^K(?=[A-Z]{3}$)/, "")
+    .toUpperCase();
+}
+
+function airportFromPublicFlightAware(airport) {
+  const code = publicAirportCode(airport);
+  if (!code) return null;
+  const known = airportCatalog[code];
+  if (known) return known;
+
+  const coordinates = Array.isArray(airport?.coord) ? airport.coord : [];
+  const lon = Number(coordinates[0]);
+  const lat = Number(coordinates[1]);
+  return {
+    code,
+    name: airport?.friendlyName ?? `${code} Airport`,
+    city: String(airport?.friendlyLocation ?? code).split(",")[0],
+    lat: Number.isFinite(lat) ? lat : 0,
+    lon: Number.isFinite(lon) ? lon : 0,
+    timeZone: String(airport?.TZ ?? "America/New_York").replace(/^:/, ""),
+  };
+}
+
+function flightNumberFromPublicIdent(ident) {
+  const normalized = String(ident ?? "").toUpperCase();
+  const match = normalized.match(/^([A-Z]{3})(\d+[A-Z]?)$/);
+  if (match) {
+    return `${airlineIataByIcao[match[1]] ?? match[1]} ${match[2]}`;
+  }
+  const shortMatch = normalized.match(/^([A-Z0-9]{2})(\d+[A-Z]?)$/);
+  return shortMatch ? `${shortMatch[1]} ${shortMatch[2]}` : usefulOptionalValue(normalized);
 }
 
 function webLookupDates(date) {

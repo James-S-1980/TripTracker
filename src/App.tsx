@@ -145,7 +145,7 @@ export function App() {
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
   const activeInboundText = activeFlight?.inboundFrom
-    ? `${activeFlight.inboundFrom.code}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}`
+    ? `${activeFlight.inboundFrom.code} ${activeFlight.inboundFrom.city}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}`
     : "";
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
   const flightSuggestions = useMemo(() => {
@@ -541,6 +541,7 @@ export function App() {
 
                   <p className="source-line">
                     Source: {activeFlight.dataSource}
+                    {activeFlight.inboundSource && ` Inbound source: ${activeFlight.inboundSource}.`}
                     {activeFlight.sourceUrl && <a href={activeFlight.sourceUrl} target="_blank" rel="noreferrer"> Open source</a>}
                   </p>
                 </article>
