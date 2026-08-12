@@ -143,6 +143,10 @@ export function App() {
   const lastSoundAtRef = useRef<Record<string, number>>({});
 
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
+  const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
+  const activeInboundText = activeFlight?.inboundFrom
+    ? `${activeFlight.inboundFrom.code}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}`
+    : "";
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
   const flightSuggestions = useMemo(() => {
     const recent = flights.map((flight) => flight.flightNumber.split(" ")[1]);
@@ -530,6 +534,8 @@ export function App() {
                   <div className="compact-facts">
                     <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
                     <span><Plane size={15} /> {activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</span>
+                    <span><Plane size={15} /> Tail {activeTailNumber ?? "pending"}</span>
+                    <span><MapPin size={15} /> Inbound {activeInboundText || "pending"}</span>
                     <span><MapPin size={15} /> Updated {timeAgo(activeFlight.lastUpdated)}</span>
                   </div>
 

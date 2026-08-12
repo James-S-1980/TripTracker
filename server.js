@@ -86,6 +86,11 @@ function usefulAirportValue(value) {
   return normalized && !/^(?:n\/?a|na|none|null|unknown|tbd|-|--|\?)$/i.test(normalized) ? normalized : "TBD";
 }
 
+function usefulOptionalValue(value) {
+  const normalized = usefulAirportValue(value);
+  return normalized === "TBD" ? undefined : normalized;
+}
+
 function mapFlightAwareFlight(flight, requestedDate) {
   const origin = normalizeAirport(flight.origin);
   const destination = normalizeAirport(flight.destination);
@@ -147,6 +152,8 @@ function mapFlightAwareFlight(flight, requestedDate) {
     progress: flight.progress_percent ?? (status === "Arrived" ? 100 : status === "En Route" ? 50 : 0),
     altitudeFt: flight.filed_altitude ? flight.filed_altitude * 100 : 0,
     groundSpeedMph: flight.filed_airspeed ? Math.round(flight.filed_airspeed * 1.15078) : 0,
+    tailNumber: usefulOptionalValue(flight.registration),
+    inboundFlightId: usefulOptionalValue(flight.inbound_fa_flight_id),
     lastUpdated: new Date().toISOString(),
     dataSource: "FlightAware AeroAPI",
     alerts,
@@ -154,10 +161,13 @@ function mapFlightAwareFlight(flight, requestedDate) {
 }
 
 async function enrichFlightAwarePosition(mappedFlight, apiKey) {
-  const [position, track] = await Promise.all([
+  const [position, track, inboundFlight] = await Promise.all([
     fetchFlightAwarePosition(mappedFlight.id, apiKey).catch(() => null),
     fetchFlightAwareTrack(mappedFlight.id, apiKey).catch(() => []),
+    mappedFlight.inboundFlightId ? fetchFlightAwareFlightById(mappedFlight.inboundFlightId, apiKey).catch(() => null) : Promise.resolve(null),
   ]);
+  const inboundFrom = inboundFlight?.origin ? normalizeAirport(inboundFlight.origin) : undefined;
+  const inboundFlightNumber = inboundFlight ? flightNumberFromFlightAware(inboundFlight) : undefined;
 
   return {
     ...mappedFlight,
@@ -165,6 +175,10 @@ async function enrichFlightAwarePosition(mappedFlight, apiKey) {
     track: track.length > 0 ? track : undefined,
     altitudeFt: position?.altitudeFt ?? track.at(-1)?.altitudeFt ?? mappedFlight.altitudeFt,
     groundSpeedMph: position?.groundSpeedMph ?? track.at(-1)?.groundSpeedMph ?? mappedFlight.groundSpeedMph,
+    tailNumber: mappedFlight.tailNumber ?? position?.tailNumber ?? track.at(-1)?.tailNumber,
+    inboundFrom,
+    inboundFlightNumber,
+    inboundSource: inboundFrom ? "FlightAware AeroAPI" : undefined,
   };
 }
 
@@ -198,9 +212,17 @@ async function enrichAdsbPosition(mappedFlight, requestedIdent) {
     aircraftPosition: match,
     altitudeFt: match.altitudeFt ?? mappedFlight.altitudeFt,
     groundSpeedMph: match.groundSpeedMph ?? mappedFlight.groundSpeedMph,
+    tailNumber: mappedFlight.tailNumber ?? match.tailNumber,
     lastUpdated: new Date().toISOString(),
     dataSource,
   };
+}
+
+function flightNumberFromFlightAware(flight) {
+  if (flight.operator_iata && flight.flight_number) {
+    return `${flight.operator_iata} ${flight.flight_number}`;
+  }
+  return flight.ident_iata ?? flight.ident ?? undefined;
 }
 
 async function fetchFlightAwarePosition(faFlightId, apiKey) {
@@ -224,6 +246,15 @@ async function fetchFlightAwareTrack(faFlightId, apiKey) {
   return positions.map((position) => mapFlightAwarePosition(position, "FlightAware track")).filter(Boolean);
 }
 
+async function fetchFlightAwareFlightById(faFlightId, apiKey) {
+  const response = await fetch(`${flightAwareBaseUrl}/flights/${encodeURIComponent(faFlightId)}`, {
+    headers: { "x-apikey": apiKey },
+  });
+  if (!response.ok) return null;
+  const payload = await response.json();
+  return (payload.flights ?? [payload]).find(Boolean) ?? null;
+}
+
 function mapFlightAwarePosition(position, source) {
   const lat = Number(position.latitude ?? position.lat);
   const lon = Number(position.longitude ?? position.lon);
@@ -239,6 +270,7 @@ function mapFlightAwarePosition(position, source) {
     headingDeg: Number(position.heading ?? position.course ?? position.heading_deg),
     timestamp: position.timestamp ?? position.time,
     source,
+    tailNumber: usefulOptionalValue(position.registration ?? position.tailnumber ?? position.tail_number),
   };
 }
 

@@ -719,6 +719,13 @@ dt,
   min-width: 0;
   padding: 7px 9px;
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-facts span svg {
+  flex: 0 0 auto;
 }
 
 .flight-card .source-line {

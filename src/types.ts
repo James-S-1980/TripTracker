@@ -28,6 +28,10 @@ export type FlightLeg = {
   progress: number;
   altitudeFt: number;
   groundSpeedMph: number;
+  tailNumber?: string;
+  inboundFrom?: Airport;
+  inboundFlightNumber?: string;
+  inboundSource?: string;
   aircraftPosition?: AircraftPosition;
   track?: AircraftPosition[];
   lastUpdated: string;
