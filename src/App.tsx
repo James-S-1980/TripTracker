@@ -22,6 +22,12 @@ type RainViewerResponse = {
   };
 };
 
+function notifyFlightEvent(eventType: "tracked" | "updated", flight: FlightLeg, changes: string[] = []): void {
+  sendFlightNotification(eventType, flight, changes).catch((error) => {
+    console.warn("TripTracker text notification failed", error);
+  });
+}
+
 function formatTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
@@ -275,7 +281,7 @@ export function App() {
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
-      sendFlightNotification("tracked", flight).catch(() => undefined);
+      notifyFlightEvent("tracked", flight);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
     } finally {
@@ -319,7 +325,7 @@ export function App() {
           playFlightSound(eventType, original.id);
         });
         if (changes.length > 0) {
-          sendFlightNotification("updated", result.value, changes).catch(() => undefined);
+          notifyFlightEvent("updated", result.value, changes);
         }
       } else {
         failures.push(original.flightNumber);

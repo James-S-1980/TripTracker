@@ -530,30 +530,48 @@ function formatFlightTextMessage(eventType, flight, changes) {
     ? `TripTracker tracking ${flight.flightNumber} ${route}`
     : `TripTracker update ${flight.flightNumber} ${route}`;
   const status = `Status: ${flight.status}`;
-  const departure = `Dep: ${formatSmsTime(flight.departureTime, flight.origin.timeZone)} ${flight.origin.code}`;
-  const arrival = `Arr: ${formatSmsTime(flight.arrivalTime, flight.destination.timeZone)} ${flight.destination.code}`;
-  const gates = `Gate: ${gateText(flight.terminal, flight.boardingGate)} -> ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const departure = flightTimeLine("Dep", flight.origin, flight.departureTime);
+  const arrival = flightTimeLine("Arr", flight.destination, flight.arrivalTime);
+  const departureYourTime = easternTimeLine("Dep your time", flight.departureTime, flight.origin.timeZone);
+  const arrivalYourTime = easternTimeLine("Arr your time", flight.arrivalTime, flight.destination.timeZone);
+  const boardingGate = `Boarding: ${gateText(flight.terminal, flight.boardingGate)}`;
+  const arrivalGate = `Arrival: ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
   const tail = flight.tailNumber ? `Tail: ${flight.tailNumber}` : undefined;
   const inbound = flight.inboundFrom
     ? `Inbound: ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
     : undefined;
   const changeText = Array.isArray(changes) && changes.length > 0 ? `Changes: ${changes.join("; ")}` : undefined;
 
-  return [header, status, changeText, departure, arrival, gates, tail, inbound]
+  return [header, status, changeText, departure, departureYourTime, arrival, arrivalYourTime, boardingGate, arrivalGate, tail, inbound]
     .filter(Boolean)
     .join("\n")
     .slice(0, 1500);
 }
 
+function flightTimeLine(label, airport, value) {
+  const airportName = usefulOptionalValue(airport?.name);
+  const city = usefulOptionalValue(airport?.city);
+  const airportDetail = airportName ? `${airport.code} / ${airportName}` : airport?.code;
+  const cityText = city ? `, ${city}` : "";
+  return `${label}: ${formatSmsTime(value, airport?.timeZone)} ${airportDetail}${cityText}`;
+}
+
+function easternTimeLine(label, value, airportTimeZone) {
+  if (!value || airportTimeZone === "America/New_York") return undefined;
+  return `${label}: ${formatSmsTime(value, "America/New_York")}`;
+}
+
 function formatSmsTime(value, timeZone) {
   if (!value) return "pending";
   try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "pending";
     return new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "2-digit",
       timeZone: timeZone ?? "America/New_York",
       timeZoneName: "short",
-    }).format(new Date(value));
+    }).format(date);
   } catch {
     return "pending";
   }
@@ -562,10 +580,10 @@ function formatSmsTime(value, timeZone) {
 function gateText(terminal, gate) {
   const cleanTerminal = usefulOptionalValue(terminal);
   const cleanGate = usefulOptionalValue(gate);
-  if (cleanTerminal && cleanGate) return `${cleanTerminal}/${cleanGate}`;
+  if (cleanTerminal && cleanGate) return `${cleanTerminal} / ${cleanGate}`;
   if (cleanGate) return cleanGate;
-  if (cleanTerminal) return `T${cleanTerminal}`;
-  return "pending";
+  if (cleanTerminal) return `Terminal ${cleanTerminal}`;
+  return "Pending";
 }
 
 async function lookupFlightAware(ident, date) {
