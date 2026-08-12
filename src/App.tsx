@@ -544,7 +544,7 @@ export function App() {
                     <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
                     <span><Plane size={15} /> {activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</span>
                     <span><Plane size={15} /> Tail {activeTailNumber ?? "pending"}</span>
-                    <span><MapPin size={15} /> Inbound {activeInboundText || "pending"}</span>
+                    <span className="inbound-fact"><MapPin size={15} /> Inbound {activeInboundText || "pending"}</span>
                     <span><MapPin size={15} /> Updated {timeAgo(activeFlight.lastUpdated)}</span>
                   </div>
 

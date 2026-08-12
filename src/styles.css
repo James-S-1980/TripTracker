@@ -728,6 +728,17 @@ dt,
   flex: 0 0 auto;
 }
 
+.compact-facts .inbound-fact {
+  border-radius: 8px;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  line-height: 1.28;
+  overflow: visible;
+  text-align: left;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .flight-card .source-line {
   border-top: 1px solid #303842;
   color: #a8b4ba;
