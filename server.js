@@ -12,6 +12,7 @@ const app = express();
 const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
+const adsbLolBaseUrl = "https://api.adsb.lol/v2";
 const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "4438762640@tmomail.net";
 const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
 const smsAppPassword = process.env.TRIPTRACKER_SMTP_APP_PASSWORD;
@@ -213,7 +214,7 @@ async function enrichAdsbPosition(mappedFlight, requestedIdent) {
 
   const searchPoints = routeSearchPoints(mappedFlight.origin, mappedFlight.destination);
   const aircraftLists = await Promise.all(
-    searchPoints.map((point) => fetchAirplanesLivePoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
+    searchPoints.map((point) => fetchAdsbPoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
   );
   const aircraft = dedupeAircraft(aircraftLists.flat());
   const match = bestAdsbMatch(aircraft, identifiers, mappedFlight);
@@ -221,7 +222,7 @@ async function enrichAdsbPosition(mappedFlight, requestedIdent) {
     return mappedFlight;
   }
 
-  const source = "Airplanes.live ADS-B";
+  const source = match.source;
   const dataSource = mappedFlight.dataSource.includes(source)
     ? mappedFlight.dataSource
     : `${mappedFlight.dataSource} + ${source}`;
@@ -328,7 +329,7 @@ function routeSearchPoints(origin, destination) {
   });
 }
 
-async function fetchAirplanesLivePoint(lat, lon, radiusNm) {
+async function fetchAdsbPoint(lat, lon, radiusNm) {
   const key = `${lat.toFixed(2)},${lon.toFixed(2)},${Math.round(radiusNm)}`;
   const cached = adsbPointCache.get(key);
   const now = Date.now();
@@ -336,16 +337,37 @@ async function fetchAirplanesLivePoint(lat, lon, radiusNm) {
     return cached.aircraft;
   }
 
-  const url = `${airplanesLiveBaseUrl}/point/${lat.toFixed(5)}/${lon.toFixed(5)}/${radiusNm.toFixed(2)}`;
-  const response = await fetch(url, { headers: browserHeaders() });
-  if (!response.ok) {
-    throw new Error(`Airplanes.live returned ${response.status}.`);
+  const aircraft = [];
+  for (const provider of adsbProviders()) {
+    const url = `${provider.baseUrl}/point/${lat.toFixed(5)}/${lon.toFixed(5)}/${radiusNm.toFixed(2)}`;
+    try {
+      const response = await fetch(url, { headers: provider.headers });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const providerAircraft = Array.isArray(payload.ac) ? payload.ac : [];
+      aircraft.push(...providerAircraft.map((item) => ({ ...item, _triptrackerAdsbSource: provider.name })));
+    } catch {
+      // Public ADS-B endpoints can reject or throttle individual requests; keep trying the provider chain.
+    }
   }
-  const payload = await response.json();
-  const aircraft = Array.isArray(payload.ac) ? payload.ac : [];
   adsbPointCache.set(key, { fetchedAt: now, aircraft });
   pruneAdsbCache(now);
   return aircraft;
+}
+
+function adsbProviders() {
+  return [
+    {
+      name: "Airplanes.live ADS-B",
+      baseUrl: airplanesLiveBaseUrl,
+      headers: airplanesLiveHeaders(),
+    },
+    {
+      name: "ADSB.lol ADS-B",
+      baseUrl: adsbLolBaseUrl,
+      headers: browserHeaders(),
+    },
+  ];
 }
 
 function pruneAdsbCache(now) {
@@ -391,7 +413,7 @@ function bestAdsbMatch(aircraft, identifiers, flight) {
       groundSpeedMph,
       headingDeg: Number(item.track),
       timestamp: new Date(Date.now() - Math.max(0, seenPositionSeconds) * 1000).toISOString(),
-      source: "Airplanes.live ADS-B",
+      source: item._triptrackerAdsbSource ?? "ADS-B",
       callsign,
       aircraftHex: item.hex ?? undefined,
       tailNumber: item.r ?? undefined,
@@ -760,7 +782,7 @@ async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNu
 
   const searchPoints = routeSearchPoints(origin, destination);
   const aircraftLists = await Promise.all(
-    searchPoints.map((point) => fetchAirplanesLivePoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
+    searchPoints.map((point) => fetchAdsbPoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
   );
   const aircraft = dedupeAircraft(aircraftLists.flat());
   const match = bestAdsbMatch(aircraft, identifiers, { origin, destination });
@@ -840,6 +862,13 @@ function browserHeaders() {
   return {
     "accept-language": "en-US,en;q=0.9",
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
+  };
+}
+
+function airplanesLiveHeaders() {
+  return {
+    ...browserHeaders(),
+    "referer": "https://airplanes.live/",
   };
 }
 
