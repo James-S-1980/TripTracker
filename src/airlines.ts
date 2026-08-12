@@ -14,13 +14,12 @@ export const airlines: Airline[] = generatedAirlines;
 
 export function resolveAirline(input: string): Airline {
   const normalized = input.trim().toLowerCase();
-  return airlines.find((airline) => (
-    airline.code.toLowerCase() === normalized ||
-    airline.icao.toLowerCase() === normalized ||
-    airline.name.toLowerCase() === normalized ||
-    airline.aliases.some((alias) => alias.toLowerCase() === normalized) ||
-    airline.name.toLowerCase().includes(normalized)
-  )) ?? {
+  const match = airlines
+    .map((airline) => ({ airline, score: airlineMatchScore(airline, normalized) }))
+    .filter((candidate) => candidate.score !== Number.POSITIVE_INFINITY)
+    .sort((a, b) => a.score - b.score || a.airline.name.localeCompare(b.airline.name))[0]?.airline;
+
+  return match ?? {
     code: input.trim().toUpperCase().slice(0, 3),
     icao: input.trim().toUpperCase().slice(0, 3),
     name: input.trim().toUpperCase(),
