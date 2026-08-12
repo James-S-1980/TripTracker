@@ -726,7 +726,7 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
 
   const departureEpoch = publicTimeValue(publicFlight.takeoffTimes) ?? publicTimeValue(publicFlight.gateDepartureTimes);
   const arrivalEpoch = publicTimeValue(publicFlight.landingTimes) ?? publicTimeValue(publicFlight.gateArrivalTimes);
-  if (!departureEpoch || !arrivalEpoch || !publicFlightDateMatches(departureEpoch, date, origin.timeZone)) return null;
+  if (!departureEpoch || !arrivalEpoch || !publicFlightMatchesDateWindow(departureEpoch, arrivalEpoch, date, origin.timeZone, destination.timeZone)) return null;
 
   const departureTime = new Date(departureEpoch * 1000).toISOString();
   const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
@@ -854,7 +854,20 @@ function publicTimeValue(times) {
   return null;
 }
 
-function publicFlightDateMatches(epochSeconds, date, timeZone) {
+function publicFlightMatchesDateWindow(departureEpoch, arrivalEpoch, date, originTimeZone, destinationTimeZone) {
+  const dates = new Set([
+    date,
+    addDays(date, -1).slice(0, 10),
+    addDays(date, 1).slice(0, 10),
+  ]);
+  const departureDate = publicFlightDateForTimeZone(departureEpoch, originTimeZone);
+  const arrivalDate = publicFlightDateForTimeZone(arrivalEpoch, destinationTimeZone);
+  const easternDepartureDate = publicFlightDateForTimeZone(departureEpoch, "America/New_York");
+  const easternArrivalDate = publicFlightDateForTimeZone(arrivalEpoch, "America/New_York");
+  return [departureDate, arrivalDate, easternDepartureDate, easternArrivalDate].some((value) => value && dates.has(value));
+}
+
+function publicFlightDateForTimeZone(epochSeconds, timeZone) {
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: timeZone ?? "UTC",
@@ -863,10 +876,9 @@ function publicFlightDateMatches(epochSeconds, date, timeZone) {
       day: "2-digit",
     }).formatToParts(new Date(epochSeconds * 1000));
     const part = (type) => parts.find((item) => item.type === type)?.value ?? "";
-    const observedDate = `${part("year")}-${part("month")}-${part("day")}`;
-    return observedDate === date;
+    return `${part("year")}-${part("month")}-${part("day")}`;
   } catch {
-    return false;
+    return "";
   }
 }
 
