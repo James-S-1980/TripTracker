@@ -103,6 +103,10 @@ function inboundStatusLabel(status: FlightLeg["inboundStatus"] | undefined): str
   return "on ground";
 }
 
+function aircraftPhotoUrl(tailNumber: string): string {
+  return `https://www.planespotters.net/photos/reg/${encodeURIComponent(tailNumber)}`;
+}
+
 function soundEventsForFlightChange(previous: FlightLeg, next: FlightLeg): SoundEventType[] {
   const events: SoundEventType[] = [];
   if (previous.status !== "En Route" && next.status === "En Route") {
@@ -543,7 +547,14 @@ export function App() {
                   <div className="compact-facts">
                     <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
                     <span><Plane size={15} /> {activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</span>
-                    <span><Plane size={15} /> Tail {activeTailNumber ?? "pending"}</span>
+                    <span>
+                      <Plane size={15} /> Tail{" "}
+                      {activeTailNumber ? (
+                        <a href={aircraftPhotoUrl(activeTailNumber)} target="_blank" rel="noreferrer" title={`View photos of ${activeTailNumber}`}>
+                          {activeTailNumber}
+                        </a>
+                      ) : "pending"}
+                    </span>
                     <span className="inbound-fact"><MapPin size={15} /> Inbound {activeInboundText || "pending"}</span>
                     <span><MapPin size={15} /> Updated {timeAgo(activeFlight.lastUpdated)}</span>
                   </div>

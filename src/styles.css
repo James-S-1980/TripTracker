@@ -728,6 +728,17 @@ dt,
   flex: 0 0 auto;
 }
 
+.compact-facts a {
+  color: #9ddcff;
+  font-weight: 950;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.compact-facts a:hover {
+  color: #c7ecff;
+}
+
 .compact-facts .inbound-fact {
   border-radius: 8px;
   grid-column: 1 / -1;
