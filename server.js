@@ -20,6 +20,7 @@ const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
+const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
 
 function loadLocalEnvironment() {
@@ -42,31 +43,19 @@ function loadLocalEnvironment() {
   }
 }
 
-const airlineIcaoByIata = {
-  AA: "AAL",
-  AS: "ASA",
-  B6: "JBU",
-  DL: "DAL",
-  F9: "FFT",
-  NK: "NKS",
-  UA: "UAL",
-  WN: "SWA",
-};
+const airlineIcaoByIata = Object.fromEntries(
+  generatedAirlines
+    .filter((airline) => airline.code && airline.icao)
+    .map((airline) => [airline.code, airline.icao]),
+);
 
 const airlineIataByIcao = Object.fromEntries(
   Object.entries(airlineIcaoByIata).map(([iata, icao]) => [icao, iata]),
 );
 
-const airlineBrands = {
-  AA: { name: "American Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AA.png" },
-  AS: { name: "Alaska Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/AS.png" },
-  B6: { name: "JetBlue", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/B6.png" },
-  DL: { name: "Delta Air Lines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/DL.png" },
-  F9: { name: "Frontier Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/F9.png" },
-  NK: { name: "Spirit Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/NK.png" },
-  UA: { name: "United Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/UA.png" },
-  WN: { name: "Southwest Airlines", logoUrl: "https://www.gstatic.com/flights/airline_logos/70px/WN.png" },
-};
+const airlineBrands = Object.fromEntries(
+  generatedAirlines.map((airline) => [airline.code, { name: airline.name, logoUrl: airline.logoUrl }]),
+);
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
 app.use(express.json({ limit: "64kb" }));
