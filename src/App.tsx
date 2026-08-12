@@ -120,8 +120,6 @@ function TripTrackerLogo() {
       <circle className="logo-orbit" cx="32" cy="32" r="24" />
       <path className="logo-route glow" d="M15 41c8-14 19-22 34-24" />
       <path className="logo-route" d="M15 41c8-14 19-22 34-24" />
-      <path className="logo-signal" d="M25 39a13 13 0 0 1 14-14" />
-      <path className="logo-signal inner" d="M30 39a8 8 0 0 1 9-9" />
       <g className="logo-aircraft" transform="translate(38 25) rotate(-28)">
         <path d="M0-11v22" />
         <path d="M0-1 10 5" />

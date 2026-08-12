@@ -99,18 +99,6 @@ input {
   stroke-width: 7;
 }
 
-.logo-signal {
-  fill: none;
-  stroke: rgba(238, 247, 244, 0.82);
-  stroke-linecap: round;
-  stroke-width: 2.8;
-}
-
-.logo-signal.inner {
-  stroke: rgba(143, 247, 237, 0.78);
-  stroke-width: 2.4;
-}
-
 .logo-aircraft {
   fill: none;
   stroke: #eef7f4;
