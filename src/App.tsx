@@ -2,7 +2,7 @@ import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, Refr
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { lookupFlight } from "./flightProvider";
+import { lookupFlight, sendFlightNotification } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { FlightLeg, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -105,6 +105,32 @@ function inboundStatusLabel(status: FlightLeg["inboundStatus"] | undefined): str
 
 function aircraftPhotoUrl(tailNumber: string): string {
   return `https://www.planespotters.net/photos/reg/${encodeURIComponent(tailNumber)}`;
+}
+
+function describeFlightChanges(previous: FlightLeg, next: FlightLeg): string[] {
+  const changes: string[] = [];
+  const previousDepartureGate = gateDisplay(previous.terminal, previous.boardingGate);
+  const nextDepartureGate = gateDisplay(next.terminal, next.boardingGate);
+  const previousArrivalGate = gateDisplay(previous.arrivalTerminal, previous.arrivalGate);
+  const nextArrivalGate = gateDisplay(next.arrivalTerminal, next.arrivalGate);
+  const previousTail = previous.tailNumber ?? previous.aircraftPosition?.tailNumber ?? "";
+  const nextTail = next.tailNumber ?? next.aircraftPosition?.tailNumber ?? "";
+  const previousInbound = inboundSummary(previous);
+  const nextInbound = inboundSummary(next);
+
+  if (previous.status !== next.status) changes.push(`Status ${previous.status} -> ${next.status}`);
+  if (previousDepartureGate !== nextDepartureGate && nextDepartureGate !== "Pending") changes.push(`Departure gate ${previousDepartureGate} -> ${nextDepartureGate}`);
+  if (previousArrivalGate !== nextArrivalGate && nextArrivalGate !== "Pending") changes.push(`Arrival gate ${previousArrivalGate} -> ${nextArrivalGate}`);
+  if (previous.departureTime !== next.departureTime) changes.push(`Departure ${formatZonedTime(next.departureTime, next.origin.timeZone ?? "America/New_York")}`);
+  if (previous.arrivalTime !== next.arrivalTime) changes.push(`Arrival ${formatZonedTime(next.arrivalTime, next.destination.timeZone ?? "America/New_York")}`);
+  if (previousTail !== nextTail && nextTail) changes.push(`Tail ${nextTail}`);
+  if (previousInbound !== nextInbound && nextInbound) changes.push(`Inbound ${nextInbound}`);
+  return changes;
+}
+
+function inboundSummary(flight: FlightLeg): string {
+  if (!flight.inboundFrom) return "";
+  return `${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`;
 }
 
 function TripTrackerLogo() {
@@ -249,6 +275,7 @@ export function App() {
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
+      sendFlightNotification("tracked", flight).catch(() => undefined);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
     } finally {
@@ -286,10 +313,14 @@ export function App() {
     refreshed.forEach((result, index) => {
       const original = flightsToRefresh[index];
       if (result.status === "fulfilled") {
+        const changes = describeFlightChanges(original, result.value);
         refreshMap.set(original.id, result.value);
         soundEventsForFlightChange(original, result.value).forEach((eventType) => {
           playFlightSound(eventType, original.id);
         });
+        if (changes.length > 0) {
+          sendFlightNotification("updated", result.value, changes).catch(() => undefined);
+        }
       } else {
         failures.push(original.flightNumber);
       }

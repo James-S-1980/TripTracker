@@ -38,6 +38,18 @@ FlightAware-backed lookups can include live aircraft position and track data. Tr
 
 Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude. When no FlightAware or ADS-B position is available, TripTracker labels the aircraft map marker as estimated from schedule.
 
+## Text notifications
+
+TripTracker can send email-to-text notifications when a flight is first tracked and when tracked flight status, gate, time, tail, or inbound details change. SMTP credentials are read only from server environment variables and should not be committed.
+
+```bash
+$env:TRIPTRACKER_SMTP_USER="James.schliesske@gmail.com"
+$env:TRIPTRACKER_SMTP_APP_PASSWORD="your-gmail-app-password"
+$env:TRIPTRACKER_SMS_TO="4438762640@tmomail.net"
+npm run build
+npm start
+```
+
 ## Build
 
 ```bash

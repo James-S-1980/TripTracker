@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "node:fs";
+import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,6 +9,9 @@ const app = express();
 const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
+const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "4438762640@tmomail.net";
+const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
+const smsAppPassword = process.env.TRIPTRACKER_SMTP_APP_PASSWORD;
 const milesToNauticalMiles = 0.868976;
 const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
@@ -42,6 +46,7 @@ const airlineBrands = {
 };
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
+app.use(express.json({ limit: "64kb" }));
 
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
@@ -467,8 +472,100 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   });
 });
 
+app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-event"], async (request, response) => {
+  try {
+    const { eventType, flight, changes = [] } = request.body ?? {};
+    if (!flight?.flightNumber || !flight?.origin?.code || !flight?.destination?.code) {
+      response.status(400).json({ error: "Notification request did not include a valid flight." });
+      return;
+    }
+
+    if (!smsAppPassword) {
+      response.status(503).json({ error: "Text notifications are not configured on the server." });
+      return;
+    }
+
+    const message = formatFlightTextMessage(eventType, flight, changes);
+    await sendTextMessage(message);
+    response.json({ ok: true });
+  } catch (error) {
+    response.status(500).json({
+      error: "Text notification failed.",
+      detail: error instanceof Error ? error.message : "Unknown notification error.",
+    });
+  }
+});
+
 function normalizeAirlineCode(code) {
   return airlineIataByIcao[code] ?? code;
+}
+
+let smsTransporter = null;
+
+function textTransporter() {
+  if (!smsTransporter) {
+    smsTransporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: smsFrom,
+        pass: smsAppPassword,
+      },
+    });
+  }
+  return smsTransporter;
+}
+
+async function sendTextMessage(message) {
+  await textTransporter().sendMail({
+    from: smsFrom,
+    to: smsRecipient,
+    subject: "",
+    text: message,
+  });
+}
+
+function formatFlightTextMessage(eventType, flight, changes) {
+  const route = `${flight.origin.code}-${flight.destination.code}`;
+  const header = eventType === "tracked"
+    ? `TripTracker tracking ${flight.flightNumber} ${route}`
+    : `TripTracker update ${flight.flightNumber} ${route}`;
+  const status = `Status: ${flight.status}`;
+  const departure = `Dep: ${formatSmsTime(flight.departureTime, flight.origin.timeZone)} ${flight.origin.code}`;
+  const arrival = `Arr: ${formatSmsTime(flight.arrivalTime, flight.destination.timeZone)} ${flight.destination.code}`;
+  const gates = `Gate: ${gateText(flight.terminal, flight.boardingGate)} -> ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const tail = flight.tailNumber ? `Tail: ${flight.tailNumber}` : undefined;
+  const inbound = flight.inboundFrom
+    ? `Inbound: ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
+    : undefined;
+  const changeText = Array.isArray(changes) && changes.length > 0 ? `Changes: ${changes.join("; ")}` : undefined;
+
+  return [header, status, changeText, departure, arrival, gates, tail, inbound]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 1500);
+}
+
+function formatSmsTime(value, timeZone) {
+  if (!value) return "pending";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timeZone ?? "America/New_York",
+      timeZoneName: "short",
+    }).format(new Date(value));
+  } catch {
+    return "pending";
+  }
+}
+
+function gateText(terminal, gate) {
+  const cleanTerminal = usefulOptionalValue(terminal);
+  const cleanGate = usefulOptionalValue(gate);
+  if (cleanTerminal && cleanGate) return `${cleanTerminal}/${cleanGate}`;
+  if (cleanGate) return cleanGate;
+  if (cleanTerminal) return `T${cleanTerminal}`;
+  return "pending";
 }
 
 async function lookupFlightAware(ident, date) {
