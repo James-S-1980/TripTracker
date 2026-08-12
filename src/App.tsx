@@ -107,6 +107,25 @@ function aircraftPhotoUrl(tailNumber: string): string {
   return `https://www.planespotters.net/photos/reg/${encodeURIComponent(tailNumber)}`;
 }
 
+function TripTrackerLogo() {
+  return (
+    <svg aria-hidden="true" className="triptracker-logo" viewBox="0 0 64 64">
+      <defs>
+        <linearGradient id="triptrackerLogoGradient" x1="11" y1="12" x2="52" y2="54" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#8ff7ed" />
+          <stop offset="0.55" stopColor="#4fd1c5" />
+          <stop offset="1" stopColor="#7dd3fc" />
+        </linearGradient>
+      </defs>
+      <circle className="logo-orbit" cx="32" cy="32" r="24" />
+      <path className="logo-route" d="M15 41c8-14 19-22 34-24" />
+      <path className="logo-aircraft" d="M42.7 12.8c1.4-1.4 3.5-.3 2.9 1.6l-4.5 14.1 8.8 8.7-2.1 2.1-10.5-4.7-5.7 5.7 1.2 5.6-1.7 1.7-4.2-6.1-6.1-4.2 1.7-1.7 5.6 1.2 5.7-5.7-4.7-10.5 2.1-2.1 8.7 8.8 2.8-14.5Z" />
+      <circle className="logo-dot origin" cx="15" cy="41" r="3.2" />
+      <circle className="logo-dot destination" cx="49" cy="17" r="3.2" />
+    </svg>
+  );
+}
+
 function soundEventsForFlightChange(previous: FlightLeg, next: FlightLeg): SoundEventType[] {
   const events: SoundEventType[] = [];
   if (previous.status !== "En Route" && next.status === "En Route") {
@@ -346,7 +365,7 @@ export function App() {
       <section className="topbar">
         <div className="brand-block">
           <div className="brand-mark" aria-hidden="true">
-            <Plane size={26} />
+            <TripTrackerLogo />
           </div>
           <div>
             <p className="eyebrow">Live flight intelligence</p>
