@@ -21,7 +21,7 @@ export async function lookupFlight(airlineInput: string, flightNumber: string, d
   return await response.json() as FlightLeg;
 }
 
-export async function sendFlightNotification(eventType: "tracked" | "updated", flight: FlightLeg, changes: string[] = []): Promise<void> {
+export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {
   const response = await fetch(`${apiBase()}/notifications/flight-event`, {
     method: "POST",
     headers: { "content-type": "application/json" },

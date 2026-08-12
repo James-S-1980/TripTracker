@@ -546,7 +546,7 @@ async function sendTextMessage(message, subject) {
 
 function formatFlightTextSubject(eventType, flight) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const prefix = eventType === "tracked" ? "Tracking" : "Update";
+  const prefix = eventType === "tracked" ? "Tracking" : eventType === "concluded" ? "Concluded" : "Update";
   return `TripTracker ${prefix}: ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 120);
 }
 
@@ -554,7 +554,9 @@ function formatFlightTextMessage(eventType, flight, changes) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
   const header = eventType === "tracked"
     ? `TripTracker tracking ${flight.flightNumber} ${route}`
-    : `TripTracker update ${flight.flightNumber} ${route}`;
+    : eventType === "concluded"
+      ? `TripTracker concluded ${flight.flightNumber} ${route}`
+      : `TripTracker update ${flight.flightNumber} ${route}`;
   const status = `Status: ${flight.status}`;
   const departure = flightTimeLine("Dep", flight.origin, flight.departureTime);
   const arrival = flightTimeLine("Arr", flight.destination, flight.arrivalTime);

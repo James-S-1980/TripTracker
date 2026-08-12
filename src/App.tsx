@@ -22,7 +22,7 @@ type RainViewerResponse = {
   };
 };
 
-function notifyFlightEvent(eventType: "tracked" | "updated", flight: FlightLeg, changes: string[] = []): void {
+function notifyFlightEvent(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): void {
   sendFlightNotification(eventType, flight, changes).catch((error) => {
     console.warn("TripTracker text notification failed", error);
   });
@@ -278,6 +278,11 @@ export function App() {
     setLookupError(null);
     try {
       const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date);
+      if (flight.status === "Arrived") {
+        setLastRefreshAt(new Date().toISOString());
+        notifyFlightEvent("concluded", flight, ["Flight already arrived; tracking concluded"]);
+        return;
+      }
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
@@ -314,6 +319,7 @@ export function App() {
       return lookupFlight(code, number, flight.date);
     }));
     const refreshMap = new Map<string, FlightLeg>();
+    const concludedIds = new Set<string>();
     const failures: string[] = [];
 
     refreshed.forEach((result, index) => {
@@ -324,7 +330,10 @@ export function App() {
         soundEventsForFlightChange(original, result.value).forEach((eventType) => {
           playFlightSound(eventType, original.id);
         });
-        if (changes.length > 0) {
+        if (result.value.status === "Arrived") {
+          concludedIds.add(original.id);
+          notifyFlightEvent("concluded", result.value, changes.length > 0 ? changes : ["Flight arrived; tracking concluded"]);
+        } else if (changes.length > 0) {
           notifyFlightEvent("updated", result.value, changes);
         }
       } else {
@@ -332,10 +341,15 @@ export function App() {
       }
     });
 
-    if (refreshMap.size > 0) {
-      setFlights((current) => current.map((flight) => refreshMap.get(flight.id) ?? flight));
-      if (activeFlight && refreshMap.has(activeFlight.id)) {
-        setActiveId(refreshMap.get(activeFlight.id)!.id);
+    if (refreshMap.size > 0 || concludedIds.size > 0) {
+      const nextFlights = flights
+        .map((flight) => refreshMap.get(flight.id) ?? flight)
+        .filter((flight) => !concludedIds.has(flight.id));
+      setFlights(nextFlights);
+      if (activeId && concludedIds.has(activeId)) {
+        setActiveId(nextFlights[0]?.id ?? null);
+      } else if (activeId && refreshMap.has(activeId)) {
+        setActiveId(refreshMap.get(activeId)!.id);
       }
       setLastRefreshAt(new Date().toISOString());
     }
