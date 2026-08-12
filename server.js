@@ -168,6 +168,7 @@ async function enrichFlightAwarePosition(mappedFlight, apiKey) {
   ]);
   const inboundFrom = inboundFlight?.origin ? normalizeAirport(inboundFlight.origin) : undefined;
   const inboundFlightNumber = inboundFlight ? flightNumberFromFlightAware(inboundFlight) : undefined;
+  const inboundStatus = inboundFlight ? statusFromFlight(inboundFlight) : undefined;
 
   return {
     ...mappedFlight,
@@ -178,6 +179,7 @@ async function enrichFlightAwarePosition(mappedFlight, apiKey) {
     tailNumber: mappedFlight.tailNumber ?? position?.tailNumber ?? track.at(-1)?.tailNumber,
     inboundFrom,
     inboundFlightNumber,
+    inboundStatus,
     inboundSource: inboundFrom ? "FlightAware AeroAPI" : undefined,
   };
 }
@@ -575,8 +577,30 @@ async function enrichFlightAwarePublicMetadata(mappedFlight, ident) {
     tailNumber: inboundTailNumber,
     inboundFrom,
     inboundFlightNumber,
+    inboundStatus: inboundStatusFromPublicFlight(inboundFlight),
     inboundSource: "FlightAware public page",
   };
+}
+
+function inboundStatusFromPublicFlight(flight) {
+  if (!flight) return undefined;
+  if (flight.cancelled) return "Cancelled";
+
+  const nowSeconds = Date.now() / 1000;
+  const actualLanding = Number(flight.landingTimes?.actual);
+  const actualTakeoff = Number(flight.takeoffTimes?.actual);
+  const estimatedTakeoff = Number(flight.takeoffTimes?.estimated ?? flight.takeoffTimes?.scheduled);
+  const estimatedLanding = Number(flight.landingTimes?.estimated ?? flight.landingTimes?.scheduled);
+  const statusText = String(flight.flightStatus ?? "").toLowerCase();
+
+  if (Number.isFinite(actualLanding) && actualLanding > 0) return "Arrived";
+  if (Number.isFinite(actualTakeoff) && actualTakeoff > 0) return "En Route";
+  if (/\b(arrived|landed)\b/.test(statusText)) return "Arrived";
+  if (/\b(en route|departed|airborne|in air)\b/.test(statusText)) return "En Route";
+  if (/\bdelayed\b/.test(statusText)) return "Delayed";
+  if (/\bboarding\b/.test(statusText)) return "Boarding";
+  if (Number.isFinite(estimatedTakeoff) && estimatedTakeoff <= nowSeconds && (!Number.isFinite(estimatedLanding) || estimatedLanding > nowSeconds)) return "En Route";
+  return "Scheduled";
 }
 
 async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNumber, publicIdent) {

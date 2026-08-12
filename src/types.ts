@@ -31,6 +31,7 @@ export type FlightLeg = {
   tailNumber?: string;
   inboundFrom?: Airport;
   inboundFlightNumber?: string;
+  inboundStatus?: FlightStatus;
   inboundSource?: string;
   aircraftPosition?: AircraftPosition;
   track?: AircraftPosition[];

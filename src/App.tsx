@@ -95,6 +95,14 @@ function gateDisplay(terminal: string, gate: string): string {
   return "Pending";
 }
 
+function inboundStatusLabel(status: FlightLeg["inboundStatus"] | undefined): string {
+  if (!status) return "";
+  if (status === "En Route") return "departed";
+  if (status === "Arrived") return "arrived";
+  if (status === "Cancelled") return "cancelled";
+  return "on ground";
+}
+
 function soundEventsForFlightChange(previous: FlightLeg, next: FlightLeg): SoundEventType[] {
   const events: SoundEventType[] = [];
   if (previous.status !== "En Route" && next.status === "En Route") {
@@ -144,8 +152,9 @@ export function App() {
 
   const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
+  const activeInboundStatus = inboundStatusLabel(activeFlight?.inboundStatus);
   const activeInboundText = activeFlight?.inboundFrom
-    ? `${activeFlight.inboundFrom.code} ${activeFlight.inboundFrom.city}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}`
+    ? `${activeFlight.inboundFrom.code} ${activeFlight.inboundFrom.city}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}${activeInboundStatus ? `, ${activeInboundStatus}` : ""}`
     : "";
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
   const flightSuggestions = useMemo(() => {
