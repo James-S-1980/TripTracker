@@ -695,7 +695,82 @@ async function lookupWebFlight(ident, airline, flightNumber, date) {
     }
   }
 
+  for (const lookupDate of candidateDates) {
+    try {
+      const flightAwarePublicFlight = await lookupFlightAwarePublic(ident, airline, flightNumber, lookupDate);
+      if (!flightAwarePublicFlight) {
+        throw new Error("FlightAware public page did not expose this flight.");
+      }
+      return flightAwarePublicFlight;
+    } catch (error) {
+      errors.push(error instanceof Error ? `FlightAware public ${lookupDate}: ${error.message}` : `FlightAware public ${lookupDate}: parse failed.`);
+    }
+  }
+
   throw new Error(errors.join(" "));
+}
+
+async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
+  const sourceUrl = `https://www.flightaware.com/live/flight/${encodeURIComponent(ident)}`;
+  const publicFlight = await fetchFlightAwarePublicFlight(sourceUrl);
+  if (!publicFlight) return null;
+
+  const publicIdent = compactIdent(publicFlight.displayIdent ?? publicFlight.iataIdent ?? publicFlight.ident ?? "");
+  const expectedIdent = compactIdent(ident);
+  const expectedIataIdent = compactIdent(`${airline}${flightNumber}`);
+  if (![expectedIdent, expectedIataIdent].includes(publicIdent)) return null;
+
+  const origin = airportFromPublicFlightAware(publicFlight.origin);
+  const destination = airportFromPublicFlightAware(publicFlight.destination);
+  if (!origin || !destination) return null;
+
+  const departureEpoch = publicTimeValue(publicFlight.takeoffTimes) ?? publicTimeValue(publicFlight.gateDepartureTimes);
+  const arrivalEpoch = publicTimeValue(publicFlight.landingTimes) ?? publicTimeValue(publicFlight.gateArrivalTimes);
+  if (!departureEpoch || !arrivalEpoch || !publicFlightDateMatches(departureEpoch, date, origin.timeZone)) return null;
+
+  const departureTime = new Date(departureEpoch * 1000).toISOString();
+  const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
+  const status = inboundStatusFromPublicFlight(publicFlight);
+  const track = publicFlightTrack(publicFlight);
+  const position = track.at(-1) ?? estimatedPosition(origin, destination, status, departureTime, arrivalTime);
+  const tailNumber = usefulOptionalValue(publicFlight.aircraft?.tail);
+
+  return {
+    id: `flightaware-public-${expectedIdent}-${date}`,
+    airline: airlineNameFromCode(airline),
+    airlineCode: airline,
+    airlineLogoUrl: airlineLogoFor(airline),
+    flightNumber: `${airline} ${flightNumber}`,
+    date,
+    origin,
+    destination,
+    departureTime,
+    arrivalTime,
+    boardingGate: usefulAirportValue(publicFlight.origin?.gate),
+    arrivalGate: usefulAirportValue(publicFlight.destination?.gate),
+    terminal: usefulAirportValue(publicFlight.origin?.terminal),
+    arrivalTerminal: usefulAirportValue(publicFlight.destination?.terminal),
+    status,
+    progress: progressFromTimes(status, departureTime, arrivalTime),
+    altitudeFt: position?.altitudeFt ?? 0,
+    groundSpeedMph: position?.groundSpeedMph ?? 0,
+    tailNumber,
+    aircraftPosition: position,
+    track: track.length > 0 ? track : undefined,
+    lastUpdated: new Date().toISOString(),
+    dataSource: "FlightAware public page",
+    sourceUrl,
+    alerts: [
+      {
+        id: `flightaware-public-${expectedIdent}-${date}-status`,
+        type: "status",
+        priority: status === "Delayed" || status === "Cancelled" ? "critical" : "high",
+        title: status,
+        message: `Parsed ${origin.code} to ${destination.code} from FlightAware public tracking data.`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
 }
 
 async function enrichFlightAwarePublicMetadata(mappedFlight, ident) {
@@ -767,6 +842,59 @@ function inboundStatusFromPublicFlight(flight) {
   if (/\bboarding\b/.test(statusText)) return "Boarding";
   if (Number.isFinite(estimatedTakeoff) && estimatedTakeoff <= nowSeconds && (!Number.isFinite(estimatedLanding) || estimatedLanding > nowSeconds)) return "En Route";
   return "Scheduled";
+}
+
+function publicTimeValue(times) {
+  const actual = Number(times?.actual);
+  const estimated = Number(times?.estimated);
+  const scheduled = Number(times?.scheduled);
+  if (Number.isFinite(actual) && actual > 0) return actual;
+  if (Number.isFinite(estimated) && estimated > 0) return estimated;
+  if (Number.isFinite(scheduled) && scheduled > 0) return scheduled;
+  return null;
+}
+
+function publicFlightDateMatches(epochSeconds, date, timeZone) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone ?? "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date(epochSeconds * 1000));
+    const part = (type) => parts.find((item) => item.type === type)?.value ?? "";
+    const observedDate = `${part("year")}-${part("month")}-${part("day")}`;
+    return observedDate === date;
+  } catch {
+    return false;
+  }
+}
+
+function publicFlightTrack(publicFlight) {
+  const rawTrack = Array.isArray(publicFlight.track) ? publicFlight.track : [];
+  return rawTrack
+    .map((point) => {
+      const coordinates = Array.isArray(point.coord) ? point.coord : [];
+      const lon = Number(coordinates[0]);
+      const lat = Number(coordinates[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+      const altitude = Number(point.alt);
+      const groundSpeed = Number(point.gs);
+      const timestamp = Number(point.timestamp);
+      return {
+        lat,
+        lon,
+        altitudeFt: Number.isFinite(altitude) ? Math.round(altitude * 100) : 0,
+        groundSpeedMph: Number.isFinite(groundSpeed) ? Math.round(groundSpeed * 1.15078) : undefined,
+        headingDeg: Number(publicFlight.heading),
+        timestamp: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : undefined,
+        source: "FlightAware public track",
+        callsign: compactIdent(publicFlight.displayIdent ?? publicFlight.ident),
+        aircraftHex: publicFlight.hexid ?? undefined,
+        tailNumber: usefulOptionalValue(publicFlight.aircraft?.tail),
+      };
+    })
+    .filter(Boolean);
 }
 
 async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNumber, publicIdent) {

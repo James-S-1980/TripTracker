@@ -48,7 +48,7 @@ export type AircraftPosition = {
   groundSpeedMph?: number;
   headingDeg?: number;
   timestamp?: string;
-  source: "FlightAware live position" | "FlightAware track" | "Airplanes.live ADS-B" | "ADSB.lol ADS-B" | "ADS-B" | "Estimated from schedule";
+  source: "FlightAware live position" | "FlightAware track" | "FlightAware public track" | "Airplanes.live ADS-B" | "ADSB.lol ADS-B" | "ADS-B" | "Estimated from schedule";
   callsign?: string;
   aircraftHex?: string;
   tailNumber?: string;
