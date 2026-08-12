@@ -1123,4 +1123,5 @@ app.use((request, response) => {
 
 app.listen(port, () => {
   console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
+  console.log(`Text notifications ${smsAppPassword ? "configured" : "not configured"}`);
 });

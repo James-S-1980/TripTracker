@@ -50,6 +50,8 @@ npm run build
 npm start
 ```
 
+On the local hosted Windows server, use `.\start-triptracker-local.ps1` so the process reads the saved user-level environment variables before starting.
+
 ## Build
 
 ```bash
