@@ -565,14 +565,38 @@ async function enrichFlightAwarePublicMetadata(mappedFlight, ident) {
       tailNumber,
     };
   }
+  const inboundFlightNumber = flightNumberFromPublicIdent(inboundFlight.displayIdent ?? inboundFlight.ident);
+  const inboundTailNumber = tailNumber ??
+    usefulOptionalValue(inboundFlight.aircraft?.tail) ??
+    await findAdsbTailForInboundFlight(inboundFrom, mappedFlight.origin, inboundFlightNumber, inboundFlight.displayIdent ?? inboundFlight.ident).catch(() => undefined);
 
   return {
     ...mappedFlight,
-    tailNumber,
+    tailNumber: inboundTailNumber,
     inboundFrom,
-    inboundFlightNumber: flightNumberFromPublicIdent(inboundFlight.displayIdent ?? inboundFlight.ident),
+    inboundFlightNumber,
     inboundSource: "FlightAware public page",
   };
+}
+
+async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNumber, publicIdent) {
+  if (!origin || !destination || !inboundFlightNumber) return undefined;
+  const [airlineCode = ""] = inboundFlightNumber.split(" ");
+  const identifiers = callsignCandidates({
+    airlineCode,
+    flightNumber: inboundFlightNumber,
+    origin,
+    destination,
+  }, publicIdent);
+  if (identifiers.length === 0) return undefined;
+
+  const searchPoints = routeSearchPoints(origin, destination);
+  const aircraftLists = await Promise.all(
+    searchPoints.map((point) => fetchAirplanesLivePoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
+  );
+  const aircraft = dedupeAircraft(aircraftLists.flat());
+  const match = bestAdsbMatch(aircraft, identifiers, { origin, destination });
+  return usefulOptionalValue(match?.tailNumber);
 }
 
 async function fetchFlightAwarePublicFlight(url) {
