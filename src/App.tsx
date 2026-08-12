@@ -122,9 +122,15 @@ function TripTrackerLogo() {
       <path className="logo-route" d="M15 41c8-14 19-22 34-24" />
       <path className="logo-signal" d="M25 39a13 13 0 0 1 14-14" />
       <path className="logo-signal inner" d="M30 39a8 8 0 0 1 9-9" />
+      <g className="logo-aircraft" transform="translate(38 25) rotate(-28)">
+        <path d="M0-11v22" />
+        <path d="M0-1 10 5" />
+        <path d="M0-1-10 5" />
+        <path d="M0 7 4 10" />
+        <path d="M0 7-4 10" />
+      </g>
       <circle className="logo-dot origin" cx="15" cy="41" r="3.2" />
       <circle className="logo-dot destination" cx="49" cy="17" r="4" />
-      <circle className="logo-dot pulse" cx="39" cy="30" r="2.6" />
     </svg>
   );
 }
