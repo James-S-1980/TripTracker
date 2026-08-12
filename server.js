@@ -452,7 +452,7 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   });
   if (flightAwareFlight) {
     const enrichedFlight = await enrichFlightAwarePublicMetadata(flightAwareFlight, ident).catch(() => flightAwareFlight);
-    response.json(await enrichAdsbPosition(enrichedFlight, ident));
+    response.json(reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident)));
     return;
   }
 
@@ -462,7 +462,7 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   });
   if (webFlight) {
     const enrichedFlight = await enrichFlightAwarePublicMetadata(webFlight, ident).catch(() => webFlight);
-    response.json(await enrichAdsbPosition(enrichedFlight, ident));
+    response.json(reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident)));
     return;
   }
 
@@ -970,6 +970,70 @@ function estimatedPosition(origin, destination, status, departureTime, arrivalTi
     timestamp: new Date().toISOString(),
     source: "Estimated from schedule",
   };
+}
+
+function reconcileEstimatedArrival(flight) {
+  if (flight.status !== "En Route" || flight.aircraftPosition?.source !== "Estimated from schedule") {
+    return flight;
+  }
+
+  const arrivalTime = new Date(flight.arrivalTime).getTime();
+  const now = Date.now();
+  if (!Number.isFinite(arrivalTime)) return flight;
+
+  const minutesUntilArrival = (arrivalTime - now) / 60000;
+  const estimatedDistanceToDestination = flight.aircraftPosition
+    ? haversineMiles(flight.aircraftPosition.lat, flight.aircraftPosition.lon, flight.destination.lat, flight.destination.lon)
+    : Number.POSITIVE_INFINITY;
+
+  if (now >= arrivalTime) {
+    return {
+      ...flight,
+      status: "Arrived",
+      progress: 100,
+      altitudeFt: 0,
+      groundSpeedMph: 0,
+      aircraftPosition: {
+        lat: flight.destination.lat,
+        lon: flight.destination.lon,
+        altitudeFt: 0,
+        groundSpeedMph: 0,
+        timestamp: new Date().toISOString(),
+        source: "Estimated from schedule",
+      },
+      lastUpdated: new Date().toISOString(),
+      alerts: replaceStatusAlert(flight, "Arrived", "Schedule estimate reached arrival time; no live ADS-B position was available."),
+    };
+  }
+
+  if (minutesUntilArrival <= 12 && estimatedDistanceToDestination <= 45) {
+    return {
+      ...flight,
+      altitudeFt: 0,
+      groundSpeedMph: 0,
+      aircraftPosition: {
+        ...flight.aircraftPosition,
+        altitudeFt: 0,
+        groundSpeedMph: 0,
+        timestamp: new Date().toISOString(),
+      },
+      lastUpdated: new Date().toISOString(),
+    };
+  }
+
+  return flight;
+}
+
+function replaceStatusAlert(flight, title, message) {
+  const statusAlert = {
+    id: `${flight.id}-status`,
+    type: "status",
+    priority: "high",
+    title,
+    message,
+    timestamp: new Date().toISOString(),
+  };
+  return [statusAlert, ...flight.alerts.filter((alert) => alert.type !== "status")];
 }
 
 function interpolateGreatCircle(origin, destination, fraction) {
