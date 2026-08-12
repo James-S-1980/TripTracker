@@ -94,9 +94,21 @@ input {
   stroke-width: 3;
 }
 
-.logo-aircraft {
-  fill: #eef7f4;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.32));
+.logo-route.glow {
+  opacity: 0.34;
+  stroke-width: 7;
+}
+
+.logo-signal {
+  fill: none;
+  stroke: rgba(238, 247, 244, 0.82);
+  stroke-linecap: round;
+  stroke-width: 2.8;
+}
+
+.logo-signal.inner {
+  stroke: rgba(143, 247, 237, 0.78);
+  stroke-width: 2.4;
 }
 
 .logo-dot {
@@ -105,6 +117,11 @@ input {
 
 .logo-dot.origin {
   opacity: 0.8;
+}
+
+.logo-dot.pulse {
+  fill: #eef7f4;
+  opacity: 0.9;
 }
 
 .eyebrow {

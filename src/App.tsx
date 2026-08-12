@@ -118,10 +118,13 @@ function TripTrackerLogo() {
         </linearGradient>
       </defs>
       <circle className="logo-orbit" cx="32" cy="32" r="24" />
+      <path className="logo-route glow" d="M15 41c8-14 19-22 34-24" />
       <path className="logo-route" d="M15 41c8-14 19-22 34-24" />
-      <path className="logo-aircraft" d="M42.7 12.8c1.4-1.4 3.5-.3 2.9 1.6l-4.5 14.1 8.8 8.7-2.1 2.1-10.5-4.7-5.7 5.7 1.2 5.6-1.7 1.7-4.2-6.1-6.1-4.2 1.7-1.7 5.6 1.2 5.7-5.7-4.7-10.5 2.1-2.1 8.7 8.8 2.8-14.5Z" />
+      <path className="logo-signal" d="M25 39a13 13 0 0 1 14-14" />
+      <path className="logo-signal inner" d="M30 39a8 8 0 0 1 9-9" />
       <circle className="logo-dot origin" cx="15" cy="41" r="3.2" />
-      <circle className="logo-dot destination" cx="49" cy="17" r="3.2" />
+      <circle className="logo-dot destination" cx="49" cy="17" r="4" />
+      <circle className="logo-dot pulse" cx="39" cy="30" r="2.6" />
     </svg>
   );
 }
