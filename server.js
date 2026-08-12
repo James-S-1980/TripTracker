@@ -486,7 +486,7 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
     }
 
     const message = formatFlightTextMessage(eventType, flight, changes);
-    await sendTextMessage(message);
+    await sendTextMessage(message, formatFlightTextSubject(eventType, flight));
     response.json({ ok: true });
   } catch (error) {
     response.status(500).json({
@@ -515,13 +515,19 @@ function textTransporter() {
   return smsTransporter;
 }
 
-async function sendTextMessage(message) {
+async function sendTextMessage(message, subject) {
   await textTransporter().sendMail({
     from: smsFrom,
     to: smsRecipient,
-    subject: "",
+    subject,
     text: message,
   });
+}
+
+function formatFlightTextSubject(eventType, flight) {
+  const route = `${flight.origin.code}-${flight.destination.code}`;
+  const prefix = eventType === "tracked" ? "Tracking" : "Update";
+  return `TripTracker ${prefix}: ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 120);
 }
 
 function formatFlightTextMessage(eventType, flight, changes) {
@@ -536,7 +542,8 @@ function formatFlightTextMessage(eventType, flight, changes) {
   const arrivalYourTime = easternTimeLine("Arr your time", flight.arrivalTime, flight.destination.timeZone);
   const boardingGate = `Boarding: ${gateText(flight.terminal, flight.boardingGate)}`;
   const arrivalGate = `Arrival: ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
-  const tail = flight.tailNumber ? `Tail: ${flight.tailNumber}` : undefined;
+  const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
+  const tail = tailNumber ? `Tail: ${tailNumber}` : "Tail: Pending";
   const inbound = flight.inboundFrom
     ? `Inbound: ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
     : undefined;
