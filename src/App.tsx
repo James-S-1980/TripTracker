@@ -2,7 +2,7 @@ import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, Refr
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { lookupFlight, sendFlightNotification } from "./flightProvider";
+import { lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { FlightLeg, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -240,6 +240,7 @@ export function App() {
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
+    void registerTrackedFlights(flights);
   }, [flights]);
 
   useEffect(() => {
@@ -358,6 +359,8 @@ export function App() {
   }
 
   function deleteFlight(flightId: string) {
+    const removedFlight = flights.find((flight) => flight.id === flightId);
+    if (removedFlight) void untrackFlight(removedFlight);
     setFlights((current) => {
       const next = current.filter((flight) => flight.id !== flightId);
       if (flightId === activeFlight?.id) {

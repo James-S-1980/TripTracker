@@ -33,3 +33,20 @@ export async function sendFlightNotification(eventType: "tracked" | "updated" | 
     throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? `Text notification failed with HTTP ${response.status}.`);
   }
 }
+
+export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void> {
+  if (flights.length === 0) return;
+  await fetch(`${apiBase()}/notifications/register-tracked`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ flights }),
+  }).catch(() => undefined);
+}
+
+export async function untrackFlight(flight: FlightLeg): Promise<void> {
+  await fetch(`${apiBase()}/notifications/untrack`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ flight }),
+  }).catch(() => undefined);
+}

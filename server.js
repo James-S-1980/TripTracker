@@ -21,6 +21,8 @@ const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const serverTrackingPollMs = 30000;
+const runtimeDataDir = path.join(__dirname, "data");
+const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-flights.json");
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
@@ -548,6 +550,7 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
 
     if (eventType === "concluded") {
       serverTrackedFlights.delete(trackedFlightKey(flight));
+      saveServerTrackedFlights();
     }
 
     response.json({ ok: true });
@@ -557,6 +560,29 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
       detail: error instanceof Error ? error.message : "Unknown notification error.",
     });
   }
+});
+
+app.post(["/api/notifications/register-tracked", "/trip/api/notifications/register-tracked"], (request, response) => {
+  const flights = Array.isArray(request.body?.flights) ? request.body.flights : [];
+  let registered = 0;
+
+  for (const flight of flights) {
+    if (!flight?.flightNumber || !flight?.origin?.code || !flight?.destination?.code || flight.status === "Arrived") continue;
+    if (!lookupArgsFromFlight(flight)) continue;
+    registerServerTrackedFlight(flight, { persist: false });
+    registered += 1;
+  }
+
+  if (registered > 0) saveServerTrackedFlights();
+  response.json({ ok: true, registered, serverTrackedFlights: serverTrackedFlights.size });
+});
+
+app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (request, response) => {
+  const flight = request.body?.flight;
+  const key = flight ? trackedFlightKey(flight) : String(request.body?.key ?? "");
+  const removed = Boolean(key) && serverTrackedFlights.delete(key);
+  if (removed) saveServerTrackedFlights();
+  response.json({ ok: true, removed, serverTrackedFlights: serverTrackedFlights.size });
 });
 
 app.get(["/api/notifications/status", "/trip/api/notifications/status"], (request, response) => {
@@ -619,7 +645,7 @@ async function registerAndNotifyTrackedFlight(flight) {
   await dispatchTextNotification("tracked", flight);
 }
 
-function registerServerTrackedFlight(flight) {
+function registerServerTrackedFlight(flight, options = {}) {
   const args = lookupArgsFromFlight(flight);
   if (!args) return;
   serverTrackedFlights.set(trackedFlightKey(flight), {
@@ -629,6 +655,7 @@ function registerServerTrackedFlight(flight) {
     date: flight.date,
     lastCheckedAt: new Date().toISOString(),
   });
+  if (options.persist !== false) saveServerTrackedFlights();
 }
 
 async function pollServerTrackedFlights() {
@@ -641,6 +668,7 @@ async function pollServerTrackedFlights() {
       if (nextFlight.status === "Arrived") {
         await dispatchTextNotification("concluded", nextFlight, changes.length > 0 ? changes : ["Flight arrived; tracking concluded"]);
         serverTrackedFlights.delete(key);
+        saveServerTrackedFlights();
         continue;
       }
 
@@ -653,13 +681,39 @@ async function pollServerTrackedFlights() {
         flight: nextFlight,
         lastCheckedAt: new Date().toISOString(),
       });
+      saveServerTrackedFlights();
     } catch (error) {
       serverTrackedFlights.set(key, {
         ...record,
         lastCheckedAt: new Date().toISOString(),
         lastError: error instanceof Error ? error.message : "Flight refresh failed.",
       });
+      saveServerTrackedFlights();
     }
+  }
+}
+
+function loadServerTrackedFlights() {
+  if (!fs.existsSync(serverTrackedFlightsPath)) return;
+  try {
+    const records = JSON.parse(fs.readFileSync(serverTrackedFlightsPath, "utf8"));
+    if (!Array.isArray(records)) return;
+    for (const record of records) {
+      if (!record?.flight || !record?.airline || !record?.flightNumber || !record?.date) continue;
+      if (record.flight.status === "Arrived") continue;
+      serverTrackedFlights.set(trackedFlightKey(record.flight), record);
+    }
+  } catch (error) {
+    console.warn("TripTracker could not restore server tracked flights", error);
+  }
+}
+
+function saveServerTrackedFlights() {
+  try {
+    fs.mkdirSync(runtimeDataDir, { recursive: true });
+    fs.writeFileSync(serverTrackedFlightsPath, JSON.stringify([...serverTrackedFlights.values()], null, 2));
+  } catch (error) {
+    console.warn("TripTracker could not persist server tracked flights", error);
   }
 }
 
@@ -1561,6 +1615,8 @@ app.use((request, response) => {
   }
   response.sendFile(path.join(__dirname, "dist", "index.html"));
 });
+
+loadServerTrackedFlights();
 
 app.listen(port, () => {
   console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
