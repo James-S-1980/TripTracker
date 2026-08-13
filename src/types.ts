@@ -57,6 +57,28 @@ export type AircraftPosition = {
   crossTrackMiles?: number;
 };
 
+export type RunwayEnd = {
+  ident: string;
+  lat: number;
+  lon: number;
+  headingDeg: number;
+  displacedThresholdFt?: number;
+};
+
+export type AirportRunway = {
+  id: string;
+  airportCode: string;
+  ident: string;
+  lengthFt?: number;
+  widthFt?: number;
+  surface?: string;
+  lighted: boolean;
+  le?: RunwayEnd | null;
+  he?: RunwayEnd | null;
+};
+
+export type RunwayCatalog = Record<string, AirportRunway[]>;
+
 export type FlightAlert = {
   id: string;
   type: "gate" | "delay" | "status" | "weather";

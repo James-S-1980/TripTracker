@@ -28,6 +28,7 @@ const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-fligh
 const notificationEventsPath = path.join(runtimeDataDir, "notification-events.json");
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
+const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "runwayCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
 const serverTrackedFlights = new Map();
 const notificationDeliveryKeys = new Map();
@@ -507,6 +508,15 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
       detail: error instanceof FlightLookupError ? error.detail : "",
     });
   }
+});
+
+app.get(["/api/runways", "/trip/api/runways"], (request, response) => {
+  const airportCodes = String(request.query.airports ?? "")
+    .split(",")
+    .map((code) => code.trim().toUpperCase())
+    .filter((code) => /^[A-Z0-9]{3}$/.test(code));
+  const uniqueAirportCodes = [...new Set(airportCodes)].slice(0, 8);
+  response.json(Object.fromEntries(uniqueAirportCodes.map((code) => [code, generatedRunways[code] ?? []])));
 });
 
 async function lookupFlightData(requestedAirline, flightNumber, date) {

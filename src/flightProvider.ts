@@ -1,5 +1,5 @@
 import { resolveAirline } from "./airlines";
-import type { FlightLeg } from "./types";
+import type { FlightLeg, RunwayCatalog } from "./types";
 
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
@@ -50,6 +50,14 @@ export async function untrackFlight(flight: FlightLeg): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ flight }),
   }).catch(() => undefined);
+}
+
+export async function fetchAirportRunways(airportCodes: string[]): Promise<RunwayCatalog> {
+  const codes = [...new Set(airportCodes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  if (codes.length === 0) return {};
+  const response = await fetch(`${apiBase()}/runways?${new URLSearchParams({ airports: codes.join(",") })}`);
+  if (!response.ok) return {};
+  return await response.json() as RunwayCatalog;
 }
 
 function compactFlightForRegistration(flight: FlightLeg): Partial<FlightLeg> {

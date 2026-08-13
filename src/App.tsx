@@ -2,9 +2,9 @@ import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, Refr
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportRunways, lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
-import type { FlightLeg, WeatherSnapshot } from "./types";
+import type { AirportRunway, FlightLeg, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
@@ -21,6 +21,16 @@ type RainViewerResponse = {
   radar?: {
     past?: RainViewerFrame[];
   };
+};
+type RunwayApproach = {
+  airportCode: string;
+  runwayIdent: string;
+  headingDeg: number;
+  threshold: L.LatLngTuple;
+  finalFix: L.LatLngTuple;
+  crossTrackNm?: number;
+  distanceToThresholdNm?: number;
+  headingDeltaDeg?: number;
 };
 
 function notifyFlightEvent(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): void {
@@ -788,6 +798,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
   const [radarEnabled, setRadarEnabled] = useState(true);
   const [radarFrame, setRadarFrame] = useState<{ generated: number | null; tileUrl: string } | null>(null);
   const [radarError, setRadarError] = useState<string | null>(null);
+  const [runwayCatalog, setRunwayCatalog] = useState<RunwayCatalog>({});
   const routePoints = useMemo(() => {
     if (flight.track && flight.track.length > 1) {
       return flight.track.map((point) => [point.lat, point.lon] as L.LatLngTuple);
@@ -798,6 +809,28 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       72,
     );
   }, [flight]);
+  const runwayApproaches = useMemo(() => [
+    ...runwayApproachesForAirport(flight.origin.code, runwayCatalog[flight.origin.code] ?? [], 10),
+    ...runwayApproachesForAirport(flight.destination.code, runwayCatalog[flight.destination.code] ?? [], 22),
+  ], [flight.origin.code, flight.destination.code, runwayCatalog]);
+  const likelyArrivalRunway = useMemo(
+    () => likelyRunwayAlignment(flight, runwayApproaches.filter((approach) => approach.airportCode === flight.destination.code)),
+    [flight, runwayApproaches],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAirportRunways([flight.origin.code, flight.destination.code])
+      .then((catalog) => {
+        if (!cancelled) setRunwayCatalog(catalog);
+      })
+      .catch(() => {
+        if (!cancelled) setRunwayCatalog({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [flight.origin.code, flight.destination.code]);
 
   useEffect(() => {
     let cancelled = false;
@@ -870,6 +903,8 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     const aircraftPoint: L.LatLngTuple | undefined = aircraft ? [aircraft.lat, aircraft.lon] : undefined;
 
     L.polyline(routePoints, { color: "#0f766e", opacity: 0.82, weight: 4 }).addTo(map);
+    drawRunwayOverlay(map, flight.origin.code, runwayCatalog[flight.origin.code] ?? [], runwayApproaches, false);
+    drawRunwayOverlay(map, flight.destination.code, runwayCatalog[flight.destination.code] ?? [], runwayApproaches, true);
     L.circleMarker(originPoint, { color: "#0f766e", fillColor: "#0f766e", fillOpacity: 1, radius: 7 })
       .bindPopup(`${flight.origin.code} ${flight.origin.city}`)
       .addTo(map);
@@ -906,7 +941,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     const bounds = L.latLngBounds([originPoint, destinationPoint, ...(aircraftPoint ? [aircraftPoint] : [])]);
     map.fitBounds(bounds.pad(0.24), { animate: false });
     window.setTimeout(() => map.invalidateSize(), 0);
-  }, [flight, routePoints]);
+  }, [flight, routePoints, runwayApproaches, runwayCatalog]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -956,10 +991,11 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
         {flight.aircraftPosition?.callsign && <span>Callsign: {flight.aircraftPosition.callsign}</span>}
         <span>Altitude: {flight.altitudeFt ? `${flight.altitudeFt.toLocaleString()} ft` : "Unavailable"}</span>
+        <span>{likelyArrivalRunway ? `Likely arrival: RWY ${likelyArrivalRunway.runwayIdent} (${likelyArrivalRunway.crossTrackNm?.toFixed(1)} NM off)` : "Arrival runway alignment pending"}</span>
         {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
         <span>Radar: {radarError ? "Unavailable" : radarEnabled ? `On, ${formatRadarTimestamp(radarFrame?.generated ?? null)}` : "Off"}</span>
       </div>
-      <p className="source-line">Route, status, and progress source: {flight.dataSource}. Weather radar source: RainViewer.</p>
+      <p className="source-line">Route, status, and progress source: {flight.dataSource}. Weather radar source: RainViewer. Runway overlay source: OurAirports.</p>
     </section>
   );
 }
@@ -970,6 +1006,132 @@ function greatCirclePoints(start: [number, number], end: [number, number], segme
     const point = interpolateGreatCircle(start[0], start[1], end[0], end[1], fraction);
     return [point.lat, point.lon];
   });
+}
+
+function runwayApproachesForAirport(airportCode: string, runways: AirportRunway[], extensionNm: number): RunwayApproach[] {
+  return runways
+    .flatMap((runway) => [
+      runway.le ? approachFromRunwayEnd(airportCode, runway.le, extensionNm) : null,
+      runway.he ? approachFromRunwayEnd(airportCode, runway.he, extensionNm) : null,
+    ])
+    .filter((approach): approach is RunwayApproach => Boolean(approach));
+}
+
+function approachFromRunwayEnd(airportCode: string, runwayEnd: RunwayEnd, extensionNm: number): RunwayApproach {
+  const finalFix = pointFromBearing(runwayEnd.lat, runwayEnd.lon, runwayEnd.headingDeg + 180, extensionNm);
+  return {
+    airportCode,
+    runwayIdent: runwayEnd.ident,
+    headingDeg: normalizeDegrees(runwayEnd.headingDeg),
+    threshold: [runwayEnd.lat, runwayEnd.lon],
+    finalFix: [finalFix.lat, finalFix.lon],
+  };
+}
+
+function drawRunwayOverlay(
+  map: L.Map,
+  airportCode: string,
+  runways: AirportRunway[],
+  approaches: RunwayApproach[],
+  primary: boolean,
+) {
+  const runwayColor = primary ? "#f8fafc" : "#a7f3d0";
+  const approachColor = primary ? "#67e8f9" : "#5eead4";
+
+  runways.slice(0, 12).forEach((runway) => {
+    if (runway.le && runway.he) {
+      L.polyline([[runway.le.lat, runway.le.lon], [runway.he.lat, runway.he.lon]], {
+        color: runwayColor,
+        opacity: primary ? 0.7 : 0.42,
+        weight: primary ? 3 : 2,
+      })
+        .bindTooltip(`${airportCode} runway ${runway.ident}${runway.lengthFt ? `, ${runway.lengthFt.toLocaleString()} ft` : ""}`)
+        .addTo(map);
+    }
+  });
+
+  approaches
+    .filter((approach) => approach.airportCode === airportCode)
+    .slice(0, 24)
+    .forEach((approach) => {
+      L.polyline([approach.finalFix, approach.threshold], {
+        color: approachColor,
+        dashArray: "7 9",
+        lineCap: "round",
+        opacity: primary ? 0.62 : 0.34,
+        weight: primary ? 2.5 : 1.8,
+      })
+        .bindTooltip(`${airportCode} RWY ${approach.runwayIdent} final, ${Math.round(approach.headingDeg)} deg`)
+        .addTo(map);
+    });
+}
+
+function likelyRunwayAlignment(flight: FlightLeg, approaches: RunwayApproach[]): RunwayApproach | null {
+  const aircraft = flight.aircraftPosition;
+  if (!aircraft || aircraft.source === "Estimated from schedule" || !Number.isFinite(aircraft.headingDeg)) return null;
+
+  const scored = approaches.map((approach) => {
+    const threshold = { lat: approach.threshold[0], lon: approach.threshold[1] };
+    const finalFix = { lat: approach.finalFix[0], lon: approach.finalFix[1] };
+    const crossTrackNm = distanceToSegmentNm({ lat: aircraft.lat, lon: aircraft.lon }, finalFix, threshold);
+    const distanceToThresholdNm = distanceNm(aircraft.lat, aircraft.lon, threshold.lat, threshold.lon);
+    const headingDeltaDeg = headingDelta(aircraft.headingDeg ?? 0, approach.headingDeg);
+    return {
+      ...approach,
+      crossTrackNm,
+      distanceToThresholdNm,
+      headingDeltaDeg,
+      score: crossTrackNm * 4 + headingDeltaDeg * 0.35 + distanceToThresholdNm * 0.08,
+    };
+  }).sort((left, right) => left.score - right.score);
+
+  const best = scored[0];
+  if (!best || best.crossTrackNm > 4 || best.headingDeltaDeg > 45 || best.distanceToThresholdNm > 35) return null;
+  return best;
+}
+
+function pointFromBearing(lat: number, lon: number, bearingDeg: number, distanceNauticalMiles: number) {
+  const angularDistance = distanceNauticalMiles / 3440.065;
+  const bearing = toRadians(normalizeDegrees(bearingDeg));
+  const lat1 = toRadians(lat);
+  const lon1 = toRadians(lon);
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+    Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+  const lon2 = lon1 + Math.atan2(
+    Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+    Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+  );
+  return { lat: toDegrees(lat2), lon: normalizeLongitude(toDegrees(lon2)) };
+}
+
+function distanceToSegmentNm(point: { lat: number; lon: number }, start: { lat: number; lon: number }, end: { lat: number; lon: number }) {
+  const meanLat = toRadians((start.lat + end.lat + point.lat) / 3);
+  const project = (coordinate: { lat: number; lon: number }) => ({
+    x: coordinate.lon * 60 * Math.cos(meanLat),
+    y: coordinate.lat * 60,
+  });
+  const p = project(point);
+  const a = project(start);
+  const b = project(end);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared));
+  const closest = { x: a.x + t * dx, y: a.y + t * dy };
+  return Math.hypot(p.x - closest.x, p.y - closest.y);
+}
+
+function distanceNm(latA: number, lonA: number, latB: number, lonB: number) {
+  const earthRadiusNm = 3440.065;
+  const lat1 = toRadians(latA);
+  const lat2 = toRadians(latB);
+  const deltaLat = toRadians(latB - latA);
+  const deltaLon = toRadians(lonB - lonA);
+  const a = Math.sin(deltaLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) ** 2;
+  return earthRadiusNm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function interpolateGreatCircle(latA: number, lonA: number, latB: number, lonB: number, fraction: number) {
@@ -996,4 +1158,17 @@ function toRadians(value: number) {
 
 function toDegrees(value: number) {
   return value * 180 / Math.PI;
+}
+
+function normalizeDegrees(value: number) {
+  return ((value % 360) + 360) % 360;
+}
+
+function normalizeLongitude(value: number) {
+  return ((((value + 180) % 360) + 360) % 360) - 180;
+}
+
+function headingDelta(left: number, right: number) {
+  const delta = Math.abs(normalizeDegrees(left) - normalizeDegrees(right));
+  return Math.min(delta, 360 - delta);
 }

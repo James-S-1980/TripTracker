@@ -9,6 +9,7 @@
     "dev:web": "vite --host 127.0.0.1",
     "generate:airlines": "node scripts/generate-airlines.mjs",
     "generate:airports": "node scripts/generate-airports.mjs",
+    "generate:runways": "node scripts/generate-runways.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server.js"
