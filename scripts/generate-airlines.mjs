@@ -12,17 +12,26 @@ const modernOverrides = [
   ["AM", "AMX", "Aeromexico", "AEROMEXICO", "Mexico"],
   ["AV", "AVA", "Avianca", "AVIANCA", "Colombia"],
   ["BA", "BAW", "British Airways", "SPEEDBIRD", "United Kingdom"],
+  ["5X", "UPS", "UPS Airlines", "UPS", "United States", ["United Parcel Service", "United Parcel Service Airlines"]],
+  ["5Y", "GTI", "Atlas Air", "GIANT", "United States"],
+  ["8C", "ATN", "Air Transport International", "AIR TRANSPORT", "United States"],
+  ["A8", "AMF", "Ameriflight", "AMFLIGHT", "United States"],
+  ["CV", "CLX", "Cargolux", "CARGOLUX", "Luxembourg"],
   ["CX", "CPA", "Cathay Pacific", "CATHAY", "Hong Kong"],
+  ["D0", "DHK", "DHL Air UK", "WORLD EXPRESS", "United Kingdom", ["DHL"]],
   ["EK", "UAE", "Emirates", "EMIRATES", "United Arab Emirates"],
   ["EY", "ETD", "Etihad Airways", "ETIHAD", "United Arab Emirates"],
   ["FI", "ICE", "Icelandair", "ICEAIR", "Iceland"],
+  ["FX", "FDX", "FedEx Express", "FEDEX", "United States", ["FedEx", "Federal Express"]],
   ["IB", "IBE", "Iberia", "IBERIA", "Spain"],
   ["JL", "JAL", "Japan Airlines", "JAPANAIR", "Japan"],
+  ["K4", "CKS", "Kalitta Air", "CONNIE", "United States"],
   ["KE", "KAL", "Korean Air", "KOREANAIR", "South Korea"],
   ["KL", "KLM", "KLM Royal Dutch Airlines", "KLM", "Netherlands"],
   ["LH", "DLH", "Lufthansa", "LUFTHANSA", "Germany"],
   ["LX", "SWR", "Swiss International Air Lines", "SWISS", "Switzerland"],
   ["NH", "ANA", "All Nippon Airways", "ALL NIPPON", "Japan"],
+  ["PO", "PAC", "Polar Air Cargo", "POLAR", "United States"],
   ["QF", "QFA", "Qantas", "QANTAS", "Australia"],
   ["QR", "QTR", "Qatar Airways", "QATARI", "Qatar"],
   ["SQ", "SIA", "Singapore Airlines", "SINGAPORE", "Singapore"],
@@ -113,15 +122,14 @@ function logoUrl(code) {
   return `https://www.gstatic.com/flights/airline_logos/70px/${code}.png`;
 }
 
-function upsert(catalog, [iata, icao, name, callsign, country]) {
-  const existing = catalog.get(iata);
+function upsert(catalog, [iata, icao, name, callsign, country, extraAliases = []]) {
   catalog.set(iata, {
     code: iata,
     icao,
     name: preferredNames.get(iata) ?? name,
     callsign,
     country,
-    aliases: Array.from(new Set([existing?.icao, existing?.callsign, icao, callsign, ...(existing?.aliases ?? [])].filter(Boolean))),
+    aliases: Array.from(new Set([icao, callsign, ...extraAliases].filter(Boolean))),
     logoUrl: logoUrl(iata),
   });
 }

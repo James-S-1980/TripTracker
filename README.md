@@ -73,7 +73,7 @@ Generated files:
 
 ## Airline catalog
 
-The airline catalog is generated from OpenFlights airline data plus overrides for common current carriers. It supports matching by airline name, IATA code, ICAO code, callsign, aliases, and country. The server uses the same generated data to convert IATA codes such as `AC` to provider-friendly ICAO identifiers such as `ACA`.
+The airline catalog is generated from OpenFlights airline data plus overrides for common current passenger and cargo carriers. It supports matching by airline name, IATA code, ICAO code, callsign, aliases, and country. The server uses the same generated data to convert IATA codes such as `AC` to provider-friendly ICAO identifiers such as `ACA`; cargo entries include carriers such as UPS Airlines (`5X`/`UPS`) and FedEx Express (`FX`/`FDX`).
 
 ```bash
 npm run generate:airlines

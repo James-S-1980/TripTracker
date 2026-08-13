@@ -755,18 +755,6 @@ export const generatedAirlines = [
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/2S.png"
   },
   {
-    "code": "CV",
-    "icao": "CVA",
-    "name": "Air Chathams",
-    "callsign": "CHATHAM",
-    "country": "New Zealand",
-    "aliases": [
-      "CVA",
-      "CHATHAM"
-    ],
-    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/CV.png"
-  },
-  {
     "code": "CA",
     "icao": "CCA",
     "name": "Air China",
@@ -1564,6 +1552,18 @@ export const generatedAirlines = [
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/TS.png"
   },
   {
+    "code": "8C",
+    "icao": "ATN",
+    "name": "Air Transport International",
+    "callsign": "AIR TRANSPORT",
+    "country": "United States",
+    "aliases": [
+      "ATN",
+      "AIR TRANSPORT"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/8C.png"
+  },
+  {
     "code": "NF",
     "icao": "AVN",
     "name": "Air Vanuatu",
@@ -2068,8 +2068,7 @@ export const generatedAirlines = [
     "country": "Japan",
     "aliases": [
       "ANA",
-      "ALL NIPPON",
-      "ANA All Nippon Airways"
+      "ALL NIPPON"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/NH.png"
   },
@@ -2191,6 +2190,18 @@ export const generatedAirlines = [
       "EAGLE FLIGHT"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/MQ.png"
+  },
+  {
+    "code": "A8",
+    "icao": "AMF",
+    "name": "Ameriflight",
+    "callsign": "AMFLIGHT",
+    "country": "United States",
+    "aliases": [
+      "AMF",
+      "AMFLIGHT"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/A8.png"
   },
   {
     "code": "WD",
@@ -2636,7 +2647,6 @@ export const generatedAirlines = [
     "country": "Colombia",
     "aliases": [
       "AVA",
-      "S.A.",
       "AVIANCA"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/AV.png"
@@ -3277,6 +3287,18 @@ export const generatedAirlines = [
       "CGP"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/8L.png"
+  },
+  {
+    "code": "CV",
+    "icao": "CLX",
+    "name": "Cargolux",
+    "callsign": "CARGOLUX",
+    "country": "Luxembourg",
+    "aliases": [
+      "CLX",
+      "CARGOLUX"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/CV.png"
   },
   {
     "code": "BW",
@@ -4036,6 +4058,19 @@ export const generatedAirlines = [
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/2A.png"
   },
   {
+    "code": "D0",
+    "icao": "DHK",
+    "name": "DHL Air UK",
+    "callsign": "WORLD EXPRESS",
+    "country": "United Kingdom",
+    "aliases": [
+      "DHK",
+      "WORLD EXPRESS",
+      "DHL"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/D0.png"
+  },
+  {
     "code": "D8",
     "icao": "DJB",
     "name": "Djibouti Airlines",
@@ -4298,8 +4333,7 @@ export const generatedAirlines = [
     "country": "United Arab Emirates",
     "aliases": [
       "UAE",
-      "EMIRATES",
-      "Emirates Airlines"
+      "EMIRATES"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/EK.png"
   },
@@ -4572,6 +4606,20 @@ export const generatedAirlines = [
       "Far Eastern"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/EF.png"
+  },
+  {
+    "code": "FX",
+    "icao": "FDX",
+    "name": "FedEx Express",
+    "callsign": "FEDEX",
+    "country": "United States",
+    "aliases": [
+      "FDX",
+      "FEDEX",
+      "FedEx",
+      "Federal Express"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/FX.png"
   },
   {
     "code": "FU",
@@ -4851,29 +4899,6 @@ export const generatedAirlines = [
       "NORDIC"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/LF.png"
-  },
-  {
-    "code": "PO",
-    "icao": "FPT",
-    "name": "FlyPortugal",
-    "callsign": "FlyPortugal",
-    "country": "Portugal",
-    "aliases": [
-      "FPT",
-      "FlyPortugal"
-    ],
-    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/PO.png"
-  },
-  {
-    "code": "FX",
-    "icao": "FOX",
-    "name": "FOX Linhas Aereas",
-    "callsign": "",
-    "country": "Brazil",
-    "aliases": [
-      "FOX"
-    ],
-    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/FX.png"
   },
   {
     "code": "FP",
@@ -5974,7 +5999,6 @@ export const generatedAirlines = [
     "country": "Japan",
     "aliases": [
       "JAL",
-      "J-BIRD",
       "JAPANAIR"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/JL.png"
@@ -6221,6 +6245,18 @@ export const generatedAirlines = [
       "JSR"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/JX.png"
+  },
+  {
+    "code": "K4",
+    "icao": "CKS",
+    "name": "Kalitta Air",
+    "callsign": "CONNIE",
+    "country": "United States",
+    "aliases": [
+      "CKS",
+      "CONNIE"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/K4.png"
   },
   {
     "code": "RQ",
@@ -6753,8 +6789,6 @@ export const generatedAirlines = [
     "callsign": "LUFTHANSA",
     "country": "Germany",
     "aliases": [
-      "GEC",
-      "LUFTHANSA CARGO",
       "DLH",
       "LUFTHANSA"
     ],
@@ -8141,6 +8175,18 @@ export const generatedAirlines = [
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/U4.png"
   },
   {
+    "code": "PO",
+    "icao": "PAC",
+    "name": "Polar Air Cargo",
+    "callsign": "POLAR",
+    "country": "United States",
+    "aliases": [
+      "PAC",
+      "POLAR"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/PO.png"
+  },
+  {
     "code": "YQ",
     "icao": "",
     "name": "Polet Airlines (Priv)",
@@ -8237,8 +8283,7 @@ export const generatedAirlines = [
     "country": "Australia",
     "aliases": [
       "QFA",
-      "QANTAS",
-      "Qantas Airways"
+      "QANTAS"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/QF.png"
   },
@@ -9099,8 +9144,6 @@ export const generatedAirlines = [
     "callsign": "SINGAPORE",
     "country": "Singapore",
     "aliases": [
-      "SQC",
-      "SINGCARGO",
       "SIA",
       "SINGAPORE"
     ],
@@ -9767,8 +9810,7 @@ export const generatedAirlines = [
     "country": "Switzerland",
     "aliases": [
       "SWR",
-      "SWISS",
-      "Swiss Airlines"
+      "SWISS"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/LX.png"
   },
@@ -10364,7 +10406,6 @@ export const generatedAirlines = [
     "country": "Turkey",
     "aliases": [
       "THY",
-      "TURKAIR",
       "TURKISH"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/TK.png"
@@ -10477,6 +10518,19 @@ export const generatedAirlines = [
       "UNITED BANGLADESH"
     ],
     "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/4H.png"
+  },
+  {
+    "code": "5X",
+    "icao": "UPS",
+    "name": "UPS Airlines",
+    "callsign": "UPS",
+    "country": "United States",
+    "aliases": [
+      "UPS",
+      "United Parcel Service",
+      "United Parcel Service Airlines"
+    ],
+    "logoUrl": "https://www.gstatic.com/flights/airline_logos/70px/5X.png"
   },
   {
     "code": "U6",
