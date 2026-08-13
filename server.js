@@ -872,10 +872,10 @@ function formatFlightTextMessage(eventType, flight, changes) {
   const status = flight.status;
   const departure = `DEP ${compactSmsTime(flight.departureTime, flight.origin?.timeZone)}`;
   const arrival = `ARR ${compactSmsTime(flight.arrivalTime, flight.destination?.timeZone)}`;
-  const boardingGate = `D ${gateText(flight.terminal, flight.boardingGate)}`;
-  const arrivalGate = `A ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const boardingGate = `DG ${gateText(flight.terminal, flight.boardingGate)}`;
+  const arrivalGate = `AG ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
   const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
-  const tail = tailNumber ? `N ${tailNumber}` : undefined;
+  const tail = tailNumber ? `TAIL ${tailNumber}` : undefined;
   const changeText = compactChangeText(changes);
 
   return [header, status, changeText, departure, arrival, boardingGate, arrivalGate, tail]
