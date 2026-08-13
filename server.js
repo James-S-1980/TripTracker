@@ -632,7 +632,6 @@ async function sendTextMessage(message, subject) {
   return await textTransporter().sendMail({
     from: smsFrom,
     to: smsRecipients.join(", "),
-    subject,
     text: message,
   });
 }
