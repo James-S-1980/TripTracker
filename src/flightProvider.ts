@@ -39,7 +39,7 @@ export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void
   await fetch(`${apiBase()}/notifications/register-tracked`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ flights }),
+    body: JSON.stringify({ flights: flights.map(compactFlightForRegistration) }),
   }).catch(() => undefined);
 }
 
@@ -49,4 +49,12 @@ export async function untrackFlight(flight: FlightLeg): Promise<void> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ flight }),
   }).catch(() => undefined);
+}
+
+function compactFlightForRegistration(flight: FlightLeg): Partial<FlightLeg> {
+  return {
+    ...flight,
+    track: undefined,
+    alerts: flight.alerts?.slice(0, 4) ?? [],
+  };
 }

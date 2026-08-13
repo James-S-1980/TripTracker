@@ -28,6 +28,7 @@ const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src",
 const adsbPointCache = new Map();
 const serverTrackedFlights = new Map();
 const notificationDeliveryKeys = new Map();
+const notificationEvents = [];
 
 function loadLocalEnvironment() {
   const envPath = path.join(__dirname, ".env.local");
@@ -64,7 +65,7 @@ const airlineBrands = Object.fromEntries(
 );
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
-app.use(express.json({ limit: "64kb" }));
+app.use(express.json({ limit: "1mb" }));
 
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
@@ -592,6 +593,16 @@ app.get(["/api/notifications/status", "/trip/api/notifications/status"], (reques
     senderConfigured: Boolean(smsFrom),
     serverTrackedFlights: serverTrackedFlights.size,
     serverPollSeconds: serverTrackingPollMs / 1000,
+    trackedFlights: [...serverTrackedFlights.values()].map((record) => ({
+      flightNumber: record.flight?.flightNumber,
+      route: record.flight?.origin?.code && record.flight?.destination?.code
+        ? `${record.flight.origin.code}-${record.flight.destination.code}`
+        : undefined,
+      status: record.flight?.status,
+      lastCheckedAt: record.lastCheckedAt,
+      lastError: record.lastError,
+    })),
+    recentNotifications: notificationEvents.slice(-12),
   });
 });
 
@@ -615,7 +626,7 @@ function textTransporter() {
 }
 
 async function sendTextMessage(message, subject) {
-  await textTransporter().sendMail({
+  return await textTransporter().sendMail({
     from: smsFrom,
     to: smsRecipient,
     subject,
@@ -627,12 +638,35 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
   const deliveryKey = notificationDeliveryKey(eventType, flight, changes);
   const now = Date.now();
   pruneNotificationDeliveryKeys(now);
-  if (notificationDeliveryKeys.has(deliveryKey)) return false;
+  if (notificationDeliveryKeys.has(deliveryKey)) {
+    recordNotificationEvent(eventType, flight, "deduped", "Duplicate event suppressed.");
+    return false;
+  }
 
   const message = formatFlightTextMessage(eventType, flight, changes);
-  await sendTextMessage(message, formatFlightTextSubject(eventType, flight));
-  notificationDeliveryKeys.set(deliveryKey, now);
-  return true;
+  const subject = formatFlightTextSubject(eventType, flight);
+  try {
+    const info = await sendTextMessage(message, subject);
+    notificationDeliveryKeys.set(deliveryKey, now);
+    recordNotificationEvent(eventType, flight, "sent", info?.messageId ?? "SMTP accepted message.");
+    return true;
+  } catch (error) {
+    recordNotificationEvent(eventType, flight, "failed", error instanceof Error ? error.message : "SMTP send failed.");
+    throw error;
+  }
+}
+
+function recordNotificationEvent(eventType, flight, result, detail) {
+  notificationEvents.push({
+    timestamp: new Date().toISOString(),
+    eventType,
+    result,
+    flightNumber: flight?.flightNumber,
+    route: flight?.origin?.code && flight?.destination?.code ? `${flight.origin.code}-${flight.destination.code}` : undefined,
+    status: flight?.status,
+    detail,
+  });
+  while (notificationEvents.length > 50) notificationEvents.shift();
 }
 
 async function registerAndNotifyTrackedFlight(flight) {
@@ -649,7 +683,7 @@ function registerServerTrackedFlight(flight, options = {}) {
   const args = lookupArgsFromFlight(flight);
   if (!args) return;
   serverTrackedFlights.set(trackedFlightKey(flight), {
-    flight,
+    flight: compactFlightForTracking(flight),
     airline: args.airline,
     flightNumber: args.flightNumber,
     date: flight.date,
@@ -678,8 +712,9 @@ async function pollServerTrackedFlights() {
 
       serverTrackedFlights.set(key, {
         ...record,
-        flight: nextFlight,
+        flight: compactFlightForTracking(nextFlight),
         lastCheckedAt: new Date().toISOString(),
+        lastError: undefined,
       });
       saveServerTrackedFlights();
     } catch (error) {
@@ -691,6 +726,15 @@ async function pollServerTrackedFlights() {
       saveServerTrackedFlights();
     }
   }
+}
+
+function compactFlightForTracking(flight) {
+  if (!flight) return flight;
+  return {
+    ...flight,
+    track: undefined,
+    alerts: Array.isArray(flight.alerts) ? flight.alerts.slice(0, 4) : [],
+  };
 }
 
 function loadServerTrackedFlights() {
