@@ -9,6 +9,7 @@ import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
 const refreshIntervalMs = 30000;
+const landedDisplayMs = 10 * 60 * 1000;
 const rainViewerApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
 
 type SoundEventType = "takeoff" | "landing" | "gate";
@@ -79,6 +80,7 @@ function statusLead(flight: FlightLeg): string {
   const now = Date.now();
   const departure = new Date(flight.departureTime).getTime();
   const arrival = new Date(flight.arrivalTime).getTime();
+  if (flight.status === "Landed") return `Landed ${durationText(now - landedTimestamp(flight))} ago`;
   if (flight.status === "Arrived") return `Arrived ${durationText(now - arrival)} ago`;
   if (flight.status === "En Route") return `Arriving in ${durationText(arrival - now)}`;
   if (flight.status === "Boarding") return `Departs in ${durationText(departure - now)}`;
@@ -104,7 +106,7 @@ function gateDisplay(terminal: string, gate: string): string {
 function inboundStatusLabel(status: FlightLeg["inboundStatus"] | undefined): string {
   if (!status) return "";
   if (status === "En Route") return "departed";
-  if (status === "Arrived") return "arrived";
+  if (status === "Landed" || status === "Arrived") return "arrived";
   if (status === "Cancelled") return "cancelled";
   return "on ground";
 }
@@ -170,7 +172,7 @@ function soundEventsForFlightChange(previous: FlightLeg, next: FlightLeg): Sound
   if (previous.status !== "En Route" && next.status === "En Route") {
     events.push("takeoff");
   }
-  if (previous.status !== "Arrived" && next.status === "Arrived") {
+  if (previous.status !== "Landed" && previous.status !== "Arrived" && (next.status === "Landed" || next.status === "Arrived")) {
     events.push("landing");
   }
 
@@ -192,6 +194,37 @@ function splitFlightDesignator(value: string): [string, string] {
   const compact = value.trim().match(/^([A-Z0-9]{2,3})(\d+)$/i);
   if (compact) return [compact[1], compact[2]];
   return value.split(" ", 2) as [string, string];
+}
+
+function landedTimestamp(flight: FlightLeg): number {
+  const landedAt = new Date(flight.landedAt ?? flight.arrivalTime).getTime();
+  return Number.isFinite(landedAt) ? landedAt : Date.now();
+}
+
+function shouldRemoveLandedFlight(flight: FlightLeg, now = Date.now()): boolean {
+  return flight.status === "Landed" && now - landedTimestamp(flight) >= landedDisplayMs;
+}
+
+function landedDisplayFlight(flight: FlightLeg, previous?: FlightLeg): FlightLeg {
+  if (flight.status !== "Arrived") return flight;
+  return {
+    ...flight,
+    status: "Landed",
+    landedAt: previous?.landedAt ?? new Date().toISOString(),
+    alerts: replaceFlightStatusAlert(flight, "Landed"),
+  };
+}
+
+function replaceFlightStatusAlert(flight: FlightLeg, status: FlightLeg["status"]): FlightLeg["alerts"] {
+  const statusAlert = {
+    id: `${flight.id}-landed`,
+    type: "status" as const,
+    priority: "high" as const,
+    title: status,
+    message: `${flight.flightNumber} has landed at ${flight.destination.code}. It will remain visible for 10 minutes.`,
+    timestamp: new Date().toISOString(),
+  };
+  return [statusAlert, ...flight.alerts.filter((alert) => alert.type !== "status")];
 }
 
 export function App() {
@@ -278,11 +311,7 @@ export function App() {
     setIsLoading(true);
     setLookupError(null);
     try {
-      const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true });
-      if (flight.status === "Arrived") {
-        setLastRefreshAt(new Date().toISOString());
-        return;
-      }
+      const flight = landedDisplayFlight(await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true }));
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
@@ -313,27 +342,35 @@ export function App() {
       : flights;
     if (flightsToRefresh.length === 0) return;
 
-    const refreshed = await Promise.allSettled(flightsToRefresh.map((flight) => {
+    const expiredLandedFlights = flightsToRefresh.filter((flight) => shouldRemoveLandedFlight(flight));
+    const expiredLandedIds = new Set(expiredLandedFlights.map((flight) => flight.id));
+    const lookupFlights = flightsToRefresh.filter((flight) => !expiredLandedIds.has(flight.id));
+    const refreshed = await Promise.allSettled(lookupFlights.map((flight) => {
       const [code, number] = splitFlightDesignator(flight.flightNumber);
       return lookupFlight(code, number, flight.date);
     }));
     const refreshMap = new Map<string, FlightLeg>();
-    const concludedIds = new Set<string>();
+    const concludedIds = new Set<string>(expiredLandedIds);
     const failures: string[] = [];
 
+    expiredLandedFlights.forEach((flight) => {
+      notifyFlightEvent("concluded", flight, ["Flight landed 10 minutes ago; tracking concluded"]);
+    });
+
     refreshed.forEach((result, index) => {
-      const original = flightsToRefresh[index];
+      const original = lookupFlights[index];
       if (result.status === "fulfilled") {
-        const changes = describeFlightChanges(original, result.value);
-        refreshMap.set(original.id, result.value);
-        soundEventsForFlightChange(original, result.value).forEach((eventType) => {
+        const nextFlight = landedDisplayFlight(result.value, original);
+        const changes = describeFlightChanges(original, nextFlight);
+        refreshMap.set(original.id, nextFlight);
+        soundEventsForFlightChange(original, nextFlight).forEach((eventType) => {
           playFlightSound(eventType, original.id);
         });
-        if (result.value.status === "Arrived") {
+        if (shouldRemoveLandedFlight(nextFlight)) {
           concludedIds.add(original.id);
-          notifyFlightEvent("concluded", result.value, changes.length > 0 ? changes : ["Flight arrived; tracking concluded"]);
+          notifyFlightEvent("concluded", nextFlight, changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"]);
         } else if (changes.length > 0) {
-          notifyFlightEvent("updated", result.value, changes);
+          notifyFlightEvent("updated", nextFlight, changes);
         }
       } else {
         failures.push(original.flightNumber);

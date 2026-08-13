@@ -22,6 +22,7 @@ const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const serverTrackingPollMs = 30000;
+const landedDisplayMs = 10 * 60 * 1000;
 const runtimeDataDir = path.join(__dirname, "data");
 const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-flights.json");
 const notificationEventsPath = path.join(runtimeDataDir, "notification-events.json");
@@ -687,7 +688,9 @@ function smtpDeliverySummary(info) {
 
 async function registerAndNotifyTrackedFlight(flight) {
   if (flight.status === "Arrived") {
-    await dispatchTextNotification("concluded", flight, ["Flight already arrived; tracking concluded"]);
+    const landedFlight = landedDisplayFlight(flight);
+    registerServerTrackedFlight(landedFlight);
+    await dispatchTextNotification("updated", landedFlight, ["Flight landed; tracking will conclude in 10 minutes"]);
     return;
   }
 
@@ -713,22 +716,30 @@ async function pollServerTrackedFlights() {
 
   for (const [key, record] of [...serverTrackedFlights.entries()]) {
     try {
+      if (shouldConcludeLandedFlight(record.flight)) {
+        await dispatchTextNotification("concluded", record.flight, ["Flight landed 10 minutes ago; tracking concluded"]);
+        serverTrackedFlights.delete(key);
+        saveServerTrackedFlights();
+        continue;
+      }
+
       const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date);
-      const changes = describeServerFlightChanges(record.flight, nextFlight);
-      if (nextFlight.status === "Arrived") {
-        await dispatchTextNotification("concluded", nextFlight, changes.length > 0 ? changes : ["Flight arrived; tracking concluded"]);
+      const displayFlight = landedDisplayFlight(nextFlight, record.flight);
+      const changes = describeServerFlightChanges(record.flight, displayFlight);
+      if (shouldConcludeLandedFlight(displayFlight)) {
+        await dispatchTextNotification("concluded", displayFlight, changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"]);
         serverTrackedFlights.delete(key);
         saveServerTrackedFlights();
         continue;
       }
 
       if (changes.length > 0) {
-        await dispatchTextNotification("updated", nextFlight, changes);
+        await dispatchTextNotification("updated", displayFlight, changes);
       }
 
       serverTrackedFlights.set(key, {
         ...record,
-        flight: compactFlightForTracking(nextFlight),
+        flight: compactFlightForTracking(displayFlight),
         lastCheckedAt: new Date().toISOString(),
         lastError: undefined,
       });
@@ -751,6 +762,26 @@ function compactFlightForTracking(flight) {
     track: undefined,
     alerts: Array.isArray(flight.alerts) ? flight.alerts.slice(0, 4) : [],
   };
+}
+
+function landedDisplayFlight(flight, previous) {
+  if (!flight || flight.status !== "Arrived") return flight;
+  const landedAt = previous?.landedAt ?? new Date().toISOString();
+  return {
+    ...flight,
+    status: "Landed",
+    landedAt,
+    alerts: replaceStatusAlert(flight, "Landed", `${flight.flightNumber} has landed at ${flight.destination.code}. Tracking will conclude in 10 minutes.`),
+  };
+}
+
+function landedTimestamp(flight) {
+  const timestamp = new Date(flight?.landedAt ?? flight?.arrivalTime).getTime();
+  return Number.isFinite(timestamp) ? timestamp : Date.now();
+}
+
+function shouldConcludeLandedFlight(flight) {
+  return flight?.status === "Landed" && Date.now() - landedTimestamp(flight) >= landedDisplayMs;
 }
 
 function loadServerTrackedFlights() {
@@ -1006,6 +1037,7 @@ function emailMetricCell(label, value) {
 }
 
 function emailStatusColor(status) {
+  if (status === "Landed") return { background: "#dcfce7", text: "#166534", border: "#86efac" };
   if (status === "Arrived") return { background: "#dcfce7", text: "#166534", border: "#86efac" };
   if (status === "En Route") return { background: "#dbeafe", text: "#1d4ed8", border: "#93c5fd" };
   if (status === "Delayed" || status === "Cancelled") return { background: "#fee2e2", text: "#991b1b", border: "#fca5a5" };
@@ -1017,6 +1049,7 @@ function statusLeadText(flight) {
   const now = Date.now();
   const departure = new Date(flight.departureTime).getTime();
   const arrival = new Date(flight.arrivalTime).getTime();
+  if (flight.status === "Landed") return `landed ${durationText(now - landedTimestamp(flight))} ago`;
   if (flight.status === "Arrived") return `arrived ${durationText(now - arrival)} ago`;
   if (flight.status === "En Route") return `arriving in ${durationText(arrival - now)}`;
   if (flight.status === "Delayed") return `delayed departure ${formatSmsTime(flight.departureTime, flight.origin?.timeZone)}`;

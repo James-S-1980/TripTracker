@@ -1,4 +1,4 @@
-export type FlightStatus = "Scheduled" | "Boarding" | "En Route" | "Delayed" | "Arrived" | "Cancelled";
+export type FlightStatus = "Scheduled" | "Boarding" | "En Route" | "Delayed" | "Landed" | "Arrived" | "Cancelled";
 
 export type Airport = {
   code: string;
@@ -38,6 +38,7 @@ export type FlightLeg = {
   lastUpdated: string;
   dataSource: string;
   sourceUrl?: string;
+  landedAt?: string;
   alerts: FlightAlert[];
 };
 
