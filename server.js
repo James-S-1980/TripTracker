@@ -628,12 +628,13 @@ function textTransporter() {
   return smsTransporter;
 }
 
-async function sendTextMessage(message, subject) {
+async function sendTextMessage(message, subject, html) {
   return await textTransporter().sendMail({
     from: smsFrom,
     to: smsRecipients.join(", "),
     subject,
     text: message,
+    html,
   });
 }
 
@@ -648,8 +649,9 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
 
   const message = formatFlightTextMessage(eventType, flight, changes);
   const subject = formatFlightTextSubject(eventType, flight);
+  const html = formatFlightEmailHtml(eventType, flight, changes);
   try {
-    const info = await sendTextMessage(message, subject);
+    const info = await sendTextMessage(message, subject, html);
     notificationDeliveryKeys.set(deliveryKey, now);
     recordNotificationEvent(eventType, flight, "sent", smtpDeliverySummary(info));
     return true;
@@ -861,52 +863,195 @@ function pruneNotificationDeliveryKeys(now) {
 
 function formatFlightTextSubject(eventType, flight) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const prefix = eventType === "tracked" ? "TRACK" : eventType === "concluded" ? "DONE" : "UPDATE";
-  return `${prefix} ${flight.flightNumber} ${route}`.slice(0, 48);
+  const prefix = eventType === "tracked" ? "Tracking" : eventType === "concluded" ? "Concluded" : "Update";
+  return `TripTracker ${prefix}: ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 120);
 }
 
 function formatFlightTextMessage(eventType, flight, changes) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const label = eventType === "tracked" ? "TRACK" : eventType === "concluded" ? "DONE" : "UPDATE";
-  const header = `TT ${label} ${flight.flightNumber} ${route}`;
-  const status = flight.status;
-  const departure = `DEP ${compactSmsTime(flight.departureTime, flight.origin?.timeZone)}`;
-  const arrival = `ARR ${compactSmsTime(flight.arrivalTime, flight.destination?.timeZone)}`;
-  const boardingGate = `DG ${gateText(flight.terminal, flight.boardingGate)}`;
-  const arrivalGate = `AG ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const label = eventType === "tracked" ? "tracking" : eventType === "concluded" ? "concluded" : "update";
+  const header = `TripTracker ${label}: ${flight.flightNumber} ${route}`;
+  const status = `Status: ${flight.status}`;
+  const departure = flightTimeLine("Departure", flight.origin, flight.departureTime);
+  const arrival = flightTimeLine("Arrival", flight.destination, flight.arrivalTime);
+  const departureYourTime = easternTimeLine("Departure your time", flight.departureTime, flight.origin.timeZone);
+  const arrivalYourTime = easternTimeLine("Arrival your time", flight.arrivalTime, flight.destination.timeZone);
+  const boardingGate = `Boarding: ${gateText(flight.terminal, flight.boardingGate)}`;
+  const arrivalGate = `Arrival gate: ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
   const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
-  const tail = tailNumber ? `TAIL ${tailNumber}` : undefined;
-  const changeText = compactChangeText(changes);
+  const tail = tailNumber ? `Tail: ${tailNumber}` : "Tail: Pending";
+  const inbound = flight.inboundFrom
+    ? `Inbound: ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
+    : undefined;
+  const changeText = Array.isArray(changes) && changes.length > 0 ? `Changes: ${changes.join("; ")}` : undefined;
+  const source = `Source: ${flight.dataSource}${flight.sourceUrl ? ` (${flight.sourceUrl})` : ""}`;
 
-  return [header, status, changeText, departure, arrival, boardingGate, arrivalGate, tail]
+  return [header, status, changeText, departure, departureYourTime, arrival, arrivalYourTime, boardingGate, arrivalGate, tail, inbound, source]
     .filter(Boolean)
     .join("\n")
-    .slice(0, 155);
+    .slice(0, 2000);
 }
 
-function compactSmsTime(value, timeZone) {
-  if (!value) return "pending";
+function formatFlightEmailHtml(eventType, flight, changes) {
+  const route = `${flight.origin.code}-${flight.destination.code}`;
+  const eventLabel = eventType === "tracked" ? "Tracking started" : eventType === "concluded" ? "Tracking concluded" : "Flight update";
+  const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
+  const progress = Math.max(0, Math.min(100, Number(flight.progress) || 0));
+  const logoUrl = usefulOptionalValue(flight.airlineLogoUrl) || airlineLogoFor(flight.airlineCode);
+  const statusColor = emailStatusColor(flight.status);
+  const changesList = Array.isArray(changes) && changes.length > 0
+    ? changes.map((change) => `<li>${escapeHtml(change)}</li>`).join("")
+    : "<li>No material changes reported.</li>";
+  const sourceLink = flight.sourceUrl
+    ? `<a href="${escapeAttribute(flight.sourceUrl)}" style="color:#0f766e;text-decoration:none;font-weight:700;">Open source</a>`
+    : "";
+  const inbound = flight.inboundFrom
+    ? `${flight.inboundFrom.code}${flight.inboundFrom.city ? ` ${flight.inboundFrom.city}` : ""}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? `, ${flight.inboundStatus}` : ""}`
+    : "Pending";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;background:#eef4f3;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4f3;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#101820;border-radius:18px;overflow:hidden;border:1px solid #26343f;">
+            <tr>
+              <td style="padding:24px 24px 18px 24px;background:#101820;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="width:72px;vertical-align:top;">
+                      ${logoUrl ? `<img src="${escapeAttribute(logoUrl)}" alt="${escapeAttribute(flight.airline)}" width="56" height="56" style="display:block;border-radius:12px;background:#ffffff;padding:6px;border:1px solid #d8e2e0;">` : `<div style="width:56px;height:56px;border-radius:12px;background:#ffffff;color:#0f766e;text-align:center;line-height:56px;font-size:20px;font-weight:800;">${escapeHtml(flight.airlineCode)}</div>`}
+                    </td>
+                    <td style="vertical-align:top;">
+                      <div style="color:#7dd3fc;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(eventLabel)}</div>
+                      <div style="color:#ffffff;font-size:34px;line-height:1.1;font-weight:800;margin-top:4px;">${escapeHtml(flight.flightNumber)}</div>
+                      <div style="color:#b6c4c2;font-size:15px;font-weight:700;margin-top:6px;">${escapeHtml(flight.airline)} &bull; ${escapeHtml(formatEmailDate(flight.date))}</div>
+                    </td>
+                    <td align="right" style="vertical-align:top;">
+                      <span style="display:inline-block;background:${statusColor.background};color:${statusColor.text};border:1px solid ${statusColor.border};border-radius:999px;padding:8px 12px;font-size:13px;font-weight:800;text-transform:uppercase;">${escapeHtml(flight.status)}</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 24px;background:#12351f;color:#b9fbc0;font-size:20px;font-weight:800;">
+                ${escapeHtml(route)} &nbsp; ${escapeHtml(statusLeadText(flight))}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px;background:#111827;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td width="42%" style="vertical-align:top;">
+                      <div style="color:#8aa09d;font-size:12px;font-weight:800;text-transform:uppercase;">Origin</div>
+                      <div style="color:#ffffff;font-size:30px;font-weight:800;margin-top:4px;">${escapeHtml(flight.origin.code)}</div>
+                      <div style="color:#d2d9d7;font-size:14px;font-weight:700;">${escapeHtml(flight.origin.name)}</div>
+                      <div style="color:#62d982;font-size:26px;font-weight:800;margin-top:12px;">${escapeHtml(formatSmsTime(flight.departureTime, flight.origin.timeZone))}</div>
+                    </td>
+                    <td width="16%" align="center" style="vertical-align:middle;">
+                      <div style="height:4px;background:#3b5350;border-radius:999px;position:relative;">
+                        <div style="width:${progress}%;height:4px;background:#8ff7ed;border-radius:999px;"></div>
+                      </div>
+                      <div style="color:#7dd3fc;font-size:13px;font-weight:800;margin-top:8px;">${progress}%</div>
+                    </td>
+                    <td width="42%" align="right" style="vertical-align:top;">
+                      <div style="color:#8aa09d;font-size:12px;font-weight:800;text-transform:uppercase;">Destination</div>
+                      <div style="color:#ffffff;font-size:30px;font-weight:800;margin-top:4px;">${escapeHtml(flight.destination.code)}</div>
+                      <div style="color:#d2d9d7;font-size:14px;font-weight:700;">${escapeHtml(flight.destination.name)}</div>
+                      <div style="color:#62d982;font-size:26px;font-weight:800;margin-top:12px;">${escapeHtml(formatSmsTime(flight.arrivalTime, flight.destination.timeZone))}</div>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;">
+                  <tr>
+                    ${emailMetricCell("Boarding", gateText(flight.terminal, flight.boardingGate))}
+                    ${emailMetricCell("Arrival", gateText(flight.arrivalTerminal, flight.arrivalGate))}
+                  </tr>
+                  <tr>
+                    ${emailMetricCell("Tail", tailNumber || "Pending")}
+                    ${emailMetricCell("Inbound", inbound)}
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 24px;background:#17212b;border-top:1px solid #26343f;">
+                <div style="color:#e5e7eb;font-size:16px;font-weight:800;margin-bottom:10px;">Changes</div>
+                <ul style="margin:0;padding-left:20px;color:#cbd5d1;font-size:14px;line-height:1.6;">${changesList}</ul>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 24px;background:#101820;color:#9ca3af;font-size:12px;line-height:1.5;">
+                Source: ${escapeHtml(flight.dataSource)} ${sourceLink}<br>
+                Updated: ${escapeHtml(formatSmsTime(flight.lastUpdated, "America/New_York"))}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function emailMetricCell(label, value) {
+  return `<td width="50%" style="padding:8px 6px 8px 0;">
+    <div style="background:#1f2933;border:1px solid #33424f;border-radius:12px;padding:14px 16px;">
+      <div style="color:#9ca3af;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;">${escapeHtml(label)}</div>
+      <div style="color:#fde047;font-size:20px;font-weight:800;margin-top:6px;line-height:1.2;">${escapeHtml(value)}</div>
+    </div>
+  </td>`;
+}
+
+function emailStatusColor(status) {
+  if (status === "Arrived") return { background: "#dcfce7", text: "#166534", border: "#86efac" };
+  if (status === "En Route") return { background: "#dbeafe", text: "#1d4ed8", border: "#93c5fd" };
+  if (status === "Delayed" || status === "Cancelled") return { background: "#fee2e2", text: "#991b1b", border: "#fca5a5" };
+  if (status === "Boarding") return { background: "#fef3c7", text: "#92400e", border: "#fcd34d" };
+  return { background: "#e5e7eb", text: "#374151", border: "#d1d5db" };
+}
+
+function statusLeadText(flight) {
+  const now = Date.now();
+  const departure = new Date(flight.departureTime).getTime();
+  const arrival = new Date(flight.arrivalTime).getTime();
+  if (flight.status === "Arrived") return `arrived ${durationText(now - arrival)} ago`;
+  if (flight.status === "En Route") return `arriving in ${durationText(arrival - now)}`;
+  if (flight.status === "Delayed") return `delayed departure ${formatSmsTime(flight.departureTime, flight.origin?.timeZone)}`;
+  if (flight.status === "Boarding") return `boarding, departs in ${durationText(departure - now)}`;
+  if (flight.status === "Cancelled") return "cancelled";
+  return `departs in ${durationText(departure - now)}`;
+}
+
+function durationText(ms) {
+  const absoluteMinutes = Math.max(0, Math.round(Math.abs(ms) / 60000));
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+}
+
+function formatEmailDate(value) {
   try {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "pending";
-    return new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: timeZone ?? "America/New_York",
-    }).format(date).replace(/\s/g, "");
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${value}T00:00:00`));
   } catch {
-    return "pending";
+    return value;
   }
 }
 
-function compactChangeText(changes) {
-  if (!Array.isArray(changes) || changes.length === 0) return undefined;
-  const text = changes[0]
-    .replace(/^Status\s+/i, "")
-    .replace(/^Departure gate\s+/i, "Gate ")
-    .replace(/^Arrival gate\s+/i, "Arr gate ")
-    .replace(/^Flight arrived; tracking concluded$/i, "Tracking ended");
-  return text.slice(0, 36);
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
 function flightTimeLine(label, airport, value) {
