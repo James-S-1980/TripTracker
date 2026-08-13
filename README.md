@@ -45,7 +45,7 @@ TripTracker can send email-to-text notifications when a flight is first tracked 
 ```bash
 $env:TRIPTRACKER_SMTP_USER="James.schliesske@gmail.com"
 $env:TRIPTRACKER_SMTP_APP_PASSWORD="your-gmail-app-password"
-$env:TRIPTRACKER_SMS_TO="4438762640@tmomail.net"
+$env:TRIPTRACKER_SMS_TO="James.schliesske@gmail.com"
 npm run build
 npm start
 ```

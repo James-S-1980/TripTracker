@@ -13,7 +13,7 @@ const port = process.env.PORT ?? 8787;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
-const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "4438762640@tmomail.net";
+const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "James.schliesske@gmail.com";
 const smsRecipients = smsRecipient.split(",").map((recipient) => recipient.trim()).filter(Boolean);
 const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
 const smsAppPassword = process.env.TRIPTRACKER_SMTP_APP_PASSWORD;
@@ -632,6 +632,7 @@ async function sendTextMessage(message, subject) {
   return await textTransporter().sendMail({
     from: smsFrom,
     to: smsRecipients.join(", "),
+    subject,
     text: message,
   });
 }
