@@ -14,6 +14,7 @@ const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
 const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "4438762640@tmomail.net";
+const smsRecipients = smsRecipient.split(",").map((recipient) => recipient.trim()).filter(Boolean);
 const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
 const smsAppPassword = process.env.TRIPTRACKER_SMTP_APP_PASSWORD;
 const milesToNauticalMiles = 0.868976;
@@ -23,6 +24,7 @@ const adsbMaxRadiusNm = 250;
 const serverTrackingPollMs = 30000;
 const runtimeDataDir = path.join(__dirname, "data");
 const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-flights.json");
+const notificationEventsPath = path.join(runtimeDataDir, "notification-events.json");
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
@@ -589,7 +591,8 @@ app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (req
 app.get(["/api/notifications/status", "/trip/api/notifications/status"], (request, response) => {
   response.json({
     configured: Boolean(smsAppPassword),
-    recipientConfigured: Boolean(smsRecipient),
+    recipientConfigured: smsRecipients.length > 0,
+    recipientCount: smsRecipients.length,
     senderConfigured: Boolean(smsFrom),
     serverTrackedFlights: serverTrackedFlights.size,
     serverPollSeconds: serverTrackingPollMs / 1000,
@@ -628,7 +631,7 @@ function textTransporter() {
 async function sendTextMessage(message, subject) {
   return await textTransporter().sendMail({
     from: smsFrom,
-    to: smsRecipient,
+    to: smsRecipients.join(", "),
     subject,
     text: message,
   });
@@ -648,7 +651,7 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
   try {
     const info = await sendTextMessage(message, subject);
     notificationDeliveryKeys.set(deliveryKey, now);
-    recordNotificationEvent(eventType, flight, "sent", info?.messageId ?? "SMTP accepted message.");
+    recordNotificationEvent(eventType, flight, "sent", smtpDeliverySummary(info));
     return true;
   } catch (error) {
     recordNotificationEvent(eventType, flight, "failed", error instanceof Error ? error.message : "SMTP send failed.");
@@ -667,6 +670,17 @@ function recordNotificationEvent(eventType, flight, result, detail) {
     detail,
   });
   while (notificationEvents.length > 50) notificationEvents.shift();
+  saveNotificationEvents();
+}
+
+function smtpDeliverySummary(info) {
+  const accepted = Array.isArray(info?.accepted) ? info.accepted.join(", ") : "";
+  const rejected = Array.isArray(info?.rejected) ? info.rejected.join(", ") : "";
+  const parts = [];
+  if (info?.messageId) parts.push(info.messageId);
+  if (accepted) parts.push(`accepted: ${accepted}`);
+  if (rejected) parts.push(`rejected: ${rejected}`);
+  return parts.join("; ") || "SMTP accepted message.";
 }
 
 async function registerAndNotifyTrackedFlight(flight) {
@@ -761,6 +775,26 @@ function saveServerTrackedFlights() {
   }
 }
 
+function loadNotificationEvents() {
+  if (!fs.existsSync(notificationEventsPath)) return;
+  try {
+    const events = JSON.parse(fs.readFileSync(notificationEventsPath, "utf8"));
+    if (!Array.isArray(events)) return;
+    notificationEvents.push(...events.slice(-50));
+  } catch (error) {
+    console.warn("TripTracker could not restore notification events", error);
+  }
+}
+
+function saveNotificationEvents() {
+  try {
+    fs.mkdirSync(runtimeDataDir, { recursive: true });
+    fs.writeFileSync(notificationEventsPath, JSON.stringify(notificationEvents.slice(-50), null, 2));
+  } catch (error) {
+    console.warn("TripTracker could not persist notification events", error);
+  }
+}
+
 function describeServerFlightChanges(previous, next) {
   const changes = [];
   const previousDepartureGate = gateText(previous.terminal, previous.boardingGate);
@@ -827,35 +861,30 @@ function pruneNotificationDeliveryKeys(now) {
 
 function formatFlightTextSubject(eventType, flight) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const prefix = eventType === "tracked" ? "Tracking" : eventType === "concluded" ? "Concluded" : "Update";
-  return `TripTracker ${prefix}: ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 120);
+  const prefix = eventType === "tracked" ? "Track" : eventType === "concluded" ? "Done" : "Update";
+  return `${prefix} ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 78);
 }
 
 function formatFlightTextMessage(eventType, flight, changes) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const header = eventType === "tracked"
-    ? `TripTracker tracking ${flight.flightNumber} ${route}`
-    : eventType === "concluded"
-      ? `TripTracker concluded ${flight.flightNumber} ${route}`
-      : `TripTracker update ${flight.flightNumber} ${route}`;
-  const status = `Status: ${flight.status}`;
-  const departure = flightTimeLine("Dep", flight.origin, flight.departureTime);
-  const arrival = flightTimeLine("Arr", flight.destination, flight.arrivalTime);
-  const departureYourTime = easternTimeLine("Dep your time", flight.departureTime, flight.origin.timeZone);
-  const arrivalYourTime = easternTimeLine("Arr your time", flight.arrivalTime, flight.destination.timeZone);
-  const boardingGate = `Boarding: ${gateText(flight.terminal, flight.boardingGate)}`;
-  const arrivalGate = `Arrival: ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const eventLabel = eventType === "tracked" ? "Tracking" : eventType === "concluded" ? "Concluded" : "Update";
+  const header = `TripTracker ${eventLabel}: ${flight.flightNumber} ${route}`;
+  const status = `Status ${flight.status}`;
+  const departure = `Dep ${formatSmsTime(flight.departureTime, flight.origin?.timeZone)} ${flight.origin.code}`;
+  const arrival = `Arr ${formatSmsTime(flight.arrivalTime, flight.destination?.timeZone)} ${flight.destination.code}`;
+  const boardingGate = `Board ${gateText(flight.terminal, flight.boardingGate)}`;
+  const arrivalGate = `Gate ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
   const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
-  const tail = tailNumber ? `Tail: ${tailNumber}` : "Tail: Pending";
+  const tail = tailNumber ? `Tail ${tailNumber}` : undefined;
   const inbound = flight.inboundFrom
-    ? `Inbound: ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
+    ? `Inbound ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
     : undefined;
-  const changeText = Array.isArray(changes) && changes.length > 0 ? `Changes: ${changes.join("; ")}` : undefined;
+  const changeText = Array.isArray(changes) && changes.length > 0 ? changes.slice(0, 2).join("; ") : undefined;
 
-  return [header, status, changeText, departure, departureYourTime, arrival, arrivalYourTime, boardingGate, arrivalGate, tail, inbound]
+  return [header, status, changeText, departure, arrival, boardingGate, arrivalGate, tail, inbound]
     .filter(Boolean)
     .join("\n")
-    .slice(0, 1500);
+    .slice(0, 480);
 }
 
 function flightTimeLine(label, airport, value) {
@@ -1661,6 +1690,7 @@ app.use((request, response) => {
 });
 
 loadServerTrackedFlights();
+loadNotificationEvents();
 
 app.listen(port, () => {
   console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
