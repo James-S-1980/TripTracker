@@ -861,30 +861,52 @@ function pruneNotificationDeliveryKeys(now) {
 
 function formatFlightTextSubject(eventType, flight) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const prefix = eventType === "tracked" ? "Track" : eventType === "concluded" ? "Done" : "Update";
-  return `${prefix} ${flight.flightNumber} ${route} ${flight.status}`.slice(0, 78);
+  const prefix = eventType === "tracked" ? "TRACK" : eventType === "concluded" ? "DONE" : "UPDATE";
+  return `${prefix} ${flight.flightNumber} ${route}`.slice(0, 48);
 }
 
 function formatFlightTextMessage(eventType, flight, changes) {
   const route = `${flight.origin.code}-${flight.destination.code}`;
-  const eventLabel = eventType === "tracked" ? "Tracking" : eventType === "concluded" ? "Concluded" : "Update";
-  const header = `TripTracker ${eventLabel}: ${flight.flightNumber} ${route}`;
-  const status = `Status ${flight.status}`;
-  const departure = `Dep ${formatSmsTime(flight.departureTime, flight.origin?.timeZone)} ${flight.origin.code}`;
-  const arrival = `Arr ${formatSmsTime(flight.arrivalTime, flight.destination?.timeZone)} ${flight.destination.code}`;
-  const boardingGate = `Board ${gateText(flight.terminal, flight.boardingGate)}`;
-  const arrivalGate = `Gate ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
+  const label = eventType === "tracked" ? "TRACK" : eventType === "concluded" ? "DONE" : "UPDATE";
+  const header = `TT ${label} ${flight.flightNumber} ${route}`;
+  const status = flight.status;
+  const departure = `DEP ${compactSmsTime(flight.departureTime, flight.origin?.timeZone)}`;
+  const arrival = `ARR ${compactSmsTime(flight.arrivalTime, flight.destination?.timeZone)}`;
+  const boardingGate = `D ${gateText(flight.terminal, flight.boardingGate)}`;
+  const arrivalGate = `A ${gateText(flight.arrivalTerminal, flight.arrivalGate)}`;
   const tailNumber = usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber);
-  const tail = tailNumber ? `Tail ${tailNumber}` : undefined;
-  const inbound = flight.inboundFrom
-    ? `Inbound ${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`
-    : undefined;
-  const changeText = Array.isArray(changes) && changes.length > 0 ? changes.slice(0, 2).join("; ") : undefined;
+  const tail = tailNumber ? `N ${tailNumber}` : undefined;
+  const changeText = compactChangeText(changes);
 
-  return [header, status, changeText, departure, arrival, boardingGate, arrivalGate, tail, inbound]
+  return [header, status, changeText, departure, arrival, boardingGate, arrivalGate, tail]
     .filter(Boolean)
     .join("\n")
-    .slice(0, 480);
+    .slice(0, 155);
+}
+
+function compactSmsTime(value, timeZone) {
+  if (!value) return "pending";
+  try {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "pending";
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timeZone ?? "America/New_York",
+    }).format(date).replace(/\s/g, "");
+  } catch {
+    return "pending";
+  }
+}
+
+function compactChangeText(changes) {
+  if (!Array.isArray(changes) || changes.length === 0) return undefined;
+  const text = changes[0]
+    .replace(/^Status\s+/i, "")
+    .replace(/^Departure gate\s+/i, "Gate ")
+    .replace(/^Arrival gate\s+/i, "Arr gate ")
+    .replace(/^Flight arrived; tracking concluded$/i, "Tracking ended");
+  return text.slice(0, 36);
 }
 
 function flightTimeLine(label, airport, value) {
