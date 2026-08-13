@@ -277,16 +277,14 @@ export function App() {
     setIsLoading(true);
     setLookupError(null);
     try {
-      const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date);
+      const flight = await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true });
       if (flight.status === "Arrived") {
         setLastRefreshAt(new Date().toISOString());
-        notifyFlightEvent("concluded", flight, ["Flight already arrived; tracking concluded"]);
         return;
       }
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
-      notifyFlightEvent("tracked", flight);
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
     } finally {

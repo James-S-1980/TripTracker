@@ -479,8 +479,13 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   const requestedAirline = String(request.query.airline ?? "").toUpperCase();
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
+  const shouldTrack = String(request.query.track ?? "").toLowerCase() === "true";
   try {
-    response.json(await lookupFlightData(requestedAirline, flightNumber, date));
+    const flight = await lookupFlightData(requestedAirline, flightNumber, date);
+    if (shouldTrack) {
+      await registerAndNotifyTrackedFlight(flight);
+    }
+    response.json(flight);
   } catch (error) {
     response.status(404).json({
       error: error instanceof Error ? error.message : "No live flight data found.",
@@ -602,6 +607,16 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
   await sendTextMessage(message, formatFlightTextSubject(eventType, flight));
   notificationDeliveryKeys.set(deliveryKey, now);
   return true;
+}
+
+async function registerAndNotifyTrackedFlight(flight) {
+  if (flight.status === "Arrived") {
+    await dispatchTextNotification("concluded", flight, ["Flight already arrived; tracking concluded"]);
+    return;
+  }
+
+  registerServerTrackedFlight(flight);
+  await dispatchTextNotification("tracked", flight);
 }
 
 function registerServerTrackedFlight(flight) {
