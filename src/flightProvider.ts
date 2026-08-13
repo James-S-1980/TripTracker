@@ -5,10 +5,11 @@ function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
 }
 
-export async function lookupFlight(airlineInput: string, flightNumber: string, date: string, options: { track?: boolean } = {}): Promise<FlightLeg> {
+export async function lookupFlight(airlineInput: string, flightNumber: string, date: string, options: { track?: boolean; monitor?: boolean } = {}): Promise<FlightLeg> {
   const airline = resolveAirline(airlineInput);
   const params = new URLSearchParams({ airline: airline.code, flightNumber, date });
   if (options.track) params.set("track", "true");
+  if (options.monitor) params.set("monitor", "true");
   let response: Response;
   try {
     response = await fetch(`${apiBase()}/flights/lookup?${params.toString()}`);

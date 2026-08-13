@@ -347,7 +347,7 @@ export function App() {
     const lookupFlights = flightsToRefresh.filter((flight) => !expiredLandedIds.has(flight.id));
     const refreshed = await Promise.allSettled(lookupFlights.map((flight) => {
       const [code, number] = splitFlightDesignator(flight.flightNumber);
-      return lookupFlight(code, number, flight.date);
+      return lookupFlight(code, number, flight.date, { monitor: true });
     }));
     const refreshMap = new Map<string, FlightLeg>();
     const concludedIds = new Set<string>(expiredLandedIds);

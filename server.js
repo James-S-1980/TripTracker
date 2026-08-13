@@ -492,10 +492,13 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
   const shouldTrack = String(request.query.track ?? "").toLowerCase() === "true";
+  const shouldMonitor = String(request.query.monitor ?? "").toLowerCase() === "true";
   try {
     const flight = await lookupFlightData(requestedAirline, flightNumber, date);
     if (shouldTrack) {
       await registerAndNotifyTrackedFlight(flight);
+    } else if (shouldMonitor) {
+      registerServerTrackedFlight(landedDisplayFlight(flight));
     }
     response.json(flight);
   } catch (error) {
