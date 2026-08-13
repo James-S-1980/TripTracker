@@ -20,9 +20,12 @@ const milesToNauticalMiles = 0.868976;
 const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
+const serverTrackingPollMs = 30000;
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
+const serverTrackedFlights = new Map();
+const notificationDeliveryKeys = new Map();
 
 function loadLocalEnvironment() {
   const envPath = path.join(__dirname, ".env.local");
@@ -474,9 +477,20 @@ function chooseFlight(flights, requestedDate) {
 
 app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, response) => {
   const requestedAirline = String(request.query.airline ?? "").toUpperCase();
-  const airline = normalizeAirlineCode(requestedAirline);
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
+  try {
+    response.json(await lookupFlightData(requestedAirline, flightNumber, date));
+  } catch (error) {
+    response.status(404).json({
+      error: error instanceof Error ? error.message : "No live flight data found.",
+      detail: error instanceof FlightLookupError ? error.detail : "",
+    });
+  }
+});
+
+async function lookupFlightData(requestedAirline, flightNumber, date) {
+  const airline = normalizeAirlineCode(String(requestedAirline ?? "").toUpperCase());
   const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
   const errors = [];
 
@@ -486,8 +500,7 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   });
   if (flightAwareFlight) {
     const enrichedFlight = await enrichFlightAwarePublicMetadata(flightAwareFlight, ident).catch(() => flightAwareFlight);
-    response.json(reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident)));
-    return;
+    return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
 
   const webFlight = await lookupWebFlight(ident, airline, flightNumber, date).catch((error) => {
@@ -496,15 +509,18 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   });
   if (webFlight) {
     const enrichedFlight = await enrichFlightAwarePublicMetadata(webFlight, ident).catch(() => webFlight);
-    response.json(reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident)));
-    return;
+    return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
 
-  response.status(404).json({
-    error: `No live flight data found for ${ident} on ${date}.`,
-    detail: errors.join(" "),
-  });
-});
+  throw new FlightLookupError(`No live flight data found for ${ident} on ${date}.`, errors.join(" "));
+}
+
+class FlightLookupError extends Error {
+  constructor(message, detail) {
+    super(message);
+    this.detail = detail;
+  }
+}
 
 app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-event"], async (request, response) => {
   try {
@@ -519,8 +535,16 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
       return;
     }
 
-    const message = formatFlightTextMessage(eventType, flight, changes);
-    await sendTextMessage(message, formatFlightTextSubject(eventType, flight));
+    if (eventType === "tracked" || eventType === "updated") {
+      registerServerTrackedFlight(flight);
+    }
+
+    await dispatchTextNotification(eventType, flight, changes);
+
+    if (eventType === "concluded") {
+      serverTrackedFlights.delete(trackedFlightKey(flight));
+    }
+
     response.json({ ok: true });
   } catch (error) {
     response.status(500).json({
@@ -535,6 +559,8 @@ app.get(["/api/notifications/status", "/trip/api/notifications/status"], (reques
     configured: Boolean(smsAppPassword),
     recipientConfigured: Boolean(smsRecipient),
     senderConfigured: Boolean(smsFrom),
+    serverTrackedFlights: serverTrackedFlights.size,
+    serverPollSeconds: serverTrackingPollMs / 1000,
   });
 });
 
@@ -564,6 +590,126 @@ async function sendTextMessage(message, subject) {
     subject,
     text: message,
   });
+}
+
+async function dispatchTextNotification(eventType, flight, changes = []) {
+  const deliveryKey = notificationDeliveryKey(eventType, flight, changes);
+  const now = Date.now();
+  pruneNotificationDeliveryKeys(now);
+  if (notificationDeliveryKeys.has(deliveryKey)) return false;
+
+  const message = formatFlightTextMessage(eventType, flight, changes);
+  await sendTextMessage(message, formatFlightTextSubject(eventType, flight));
+  notificationDeliveryKeys.set(deliveryKey, now);
+  return true;
+}
+
+function registerServerTrackedFlight(flight) {
+  const args = lookupArgsFromFlight(flight);
+  if (!args) return;
+  serverTrackedFlights.set(trackedFlightKey(flight), {
+    flight,
+    airline: args.airline,
+    flightNumber: args.flightNumber,
+    date: flight.date,
+    lastCheckedAt: new Date().toISOString(),
+  });
+}
+
+async function pollServerTrackedFlights() {
+  if (!smsAppPassword || serverTrackedFlights.size === 0) return;
+
+  for (const [key, record] of [...serverTrackedFlights.entries()]) {
+    try {
+      const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date);
+      const changes = describeServerFlightChanges(record.flight, nextFlight);
+      if (nextFlight.status === "Arrived") {
+        await dispatchTextNotification("concluded", nextFlight, changes.length > 0 ? changes : ["Flight arrived; tracking concluded"]);
+        serverTrackedFlights.delete(key);
+        continue;
+      }
+
+      if (changes.length > 0) {
+        await dispatchTextNotification("updated", nextFlight, changes);
+      }
+
+      serverTrackedFlights.set(key, {
+        ...record,
+        flight: nextFlight,
+        lastCheckedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      serverTrackedFlights.set(key, {
+        ...record,
+        lastCheckedAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : "Flight refresh failed.",
+      });
+    }
+  }
+}
+
+function describeServerFlightChanges(previous, next) {
+  const changes = [];
+  const previousDepartureGate = gateText(previous.terminal, previous.boardingGate);
+  const nextDepartureGate = gateText(next.terminal, next.boardingGate);
+  const previousArrivalGate = gateText(previous.arrivalTerminal, previous.arrivalGate);
+  const nextArrivalGate = gateText(next.arrivalTerminal, next.arrivalGate);
+  const previousTail = usefulOptionalValue(previous.tailNumber) || usefulOptionalValue(previous.aircraftPosition?.tailNumber);
+  const nextTail = usefulOptionalValue(next.tailNumber) || usefulOptionalValue(next.aircraftPosition?.tailNumber);
+  const previousInbound = inboundNotificationSummary(previous);
+  const nextInbound = inboundNotificationSummary(next);
+
+  if (previous.status !== next.status) changes.push(`Status ${previous.status} -> ${next.status}`);
+  if (previousDepartureGate !== nextDepartureGate && nextDepartureGate !== "Pending") changes.push(`Departure gate ${previousDepartureGate} -> ${nextDepartureGate}`);
+  if (previousArrivalGate !== nextArrivalGate && nextArrivalGate !== "Pending") changes.push(`Arrival gate ${previousArrivalGate} -> ${nextArrivalGate}`);
+  if (previous.departureTime !== next.departureTime) changes.push(`Departure ${formatSmsTime(next.departureTime, next.origin?.timeZone)}`);
+  if (previous.arrivalTime !== next.arrivalTime) changes.push(`Arrival ${formatSmsTime(next.arrivalTime, next.destination?.timeZone)}`);
+  if (previousTail !== nextTail && nextTail) changes.push(`Tail ${nextTail}`);
+  if (previousInbound !== nextInbound && nextInbound) changes.push(`Inbound ${nextInbound}`);
+  return changes;
+}
+
+function inboundNotificationSummary(flight) {
+  if (!flight.inboundFrom) return "";
+  return `${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`;
+}
+
+function lookupArgsFromFlight(flight) {
+  const match = String(flight.flightNumber ?? "").trim().match(/^([A-Z0-9]{2,3})\s*(\d+[A-Z]?)$/i);
+  if (!match || !flight.date) return null;
+  return {
+    airline: match[1].toUpperCase(),
+    flightNumber: match[2].replace(/\D/g, ""),
+  };
+}
+
+function trackedFlightKey(flight) {
+  const args = lookupArgsFromFlight(flight);
+  return args ? `${args.airline}-${args.flightNumber}-${flight.date}` : `${flight.flightNumber}-${flight.date}`;
+}
+
+function notificationDeliveryKey(eventType, flight, changes) {
+  const changeFingerprint = eventType === "concluded" ? "" : Array.isArray(changes) ? changes.join("|") : "";
+  return [
+    eventType,
+    trackedFlightKey(flight),
+    flight.status,
+    flight.departureTime,
+    flight.arrivalTime,
+    gateText(flight.terminal, flight.boardingGate),
+    gateText(flight.arrivalTerminal, flight.arrivalGate),
+    usefulOptionalValue(flight.tailNumber) || usefulOptionalValue(flight.aircraftPosition?.tailNumber),
+    changeFingerprint,
+  ].join("::");
+}
+
+function pruneNotificationDeliveryKeys(now) {
+  const ttlMs = 10 * 60 * 1000;
+  for (const [key, timestamp] of notificationDeliveryKeys.entries()) {
+    if (now - timestamp > ttlMs) {
+      notificationDeliveryKeys.delete(key);
+    }
+  }
 }
 
 function formatFlightTextSubject(eventType, flight) {
@@ -1405,3 +1551,9 @@ app.listen(port, () => {
   console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
   console.log(`Text notifications ${smsAppPassword ? "configured" : "not configured"}`);
 });
+
+setInterval(() => {
+  pollServerTrackedFlights().catch((error) => {
+    console.warn("TripTracker server-side tracking poll failed", error);
+  });
+}, serverTrackingPollMs);
