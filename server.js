@@ -69,6 +69,12 @@ const airlineBrands = Object.fromEntries(
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
 app.use(express.json({ limit: "1mb" }));
+app.use((request, response, next) => {
+  if (request.path.endsWith(".html") || request.path === "/" || request.path === "/trip" || request.path === "/trip/") {
+    response.setHeader("Cache-Control", "no-store");
+  }
+  next();
+});
 
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
@@ -550,13 +556,13 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
       registerServerTrackedFlight(flight);
     }
 
-    await dispatchTextNotification(eventType, flight, changes);
-
     if (eventType === "concluded") {
-      serverTrackedFlights.delete(trackedFlightKey(flight));
-      saveServerTrackedFlights();
+      const conclusion = await handleConcludedNotificationRequest(flight, changes);
+      response.json(conclusion);
+      return;
     }
 
+    await dispatchTextNotification(eventType, flight, changes);
     response.json({ ok: true });
   } catch (error) {
     response.status(500).json({
@@ -565,6 +571,31 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
     });
   }
 });
+
+async function handleConcludedNotificationRequest(flight, changes = []) {
+  const key = trackedFlightKey(flight);
+  const record = serverTrackedFlights.get(key);
+  const displayFlight = landedDisplayFlight(flight, record?.flight);
+
+  if (displayFlight.status === "Landed" && !shouldConcludeLandedFlight(displayFlight)) {
+    registerServerTrackedFlight(displayFlight);
+    const landedChanges = Array.isArray(changes) && changes.length > 0
+      ? changes
+      : ["Flight landed; tracking will conclude in 10 minutes"];
+    await dispatchTextNotification("updated", displayFlight, landedChanges);
+    return {
+      ok: true,
+      deferred: true,
+      reason: "Flight is landed and remains in the 10-minute hold window.",
+      serverTrackedFlights: serverTrackedFlights.size,
+    };
+  }
+
+  await dispatchTextNotification("concluded", displayFlight, changes);
+  serverTrackedFlights.delete(key);
+  saveServerTrackedFlights();
+  return { ok: true, concluded: true, serverTrackedFlights: serverTrackedFlights.size };
+}
 
 app.post(["/api/notifications/register-tracked", "/trip/api/notifications/register-tracked"], (request, response) => {
   const flights = Array.isArray(request.body?.flights) ? request.body.flights : [];
