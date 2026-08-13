@@ -795,6 +795,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const radarLayerRef = useRef<L.TileLayer | null>(null);
+  const lastAutoFitKeyRef = useRef<string | null>(null);
   const [radarEnabled, setRadarEnabled] = useState(true);
   const [radarFrame, setRadarFrame] = useState<{ generated: number | null; tileUrl: string } | null>(null);
   const [radarError, setRadarError] = useState<string | null>(null);
@@ -809,6 +810,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       72,
     );
   }, [flight]);
+  const autoFitKey = `${flight.flightNumber}-${flight.date}-${flight.origin.code}-${flight.destination.code}`;
   const runwayApproaches = useMemo(() => [
     ...runwayApproachesForAirport(flight.origin.code, runwayCatalog[flight.origin.code] ?? [], 10),
     ...runwayApproachesForAirport(flight.destination.code, runwayCatalog[flight.destination.code] ?? [], 22),
@@ -938,10 +940,13 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         .addTo(map);
     }
 
-    const bounds = L.latLngBounds([originPoint, destinationPoint, ...(aircraftPoint ? [aircraftPoint] : [])]);
-    map.fitBounds(bounds.pad(0.24), { animate: false });
+    if (lastAutoFitKeyRef.current !== autoFitKey) {
+      const bounds = L.latLngBounds([originPoint, destinationPoint, ...(aircraftPoint ? [aircraftPoint] : [])]);
+      map.fitBounds(bounds.pad(0.24), { animate: false });
+      lastAutoFitKeyRef.current = autoFitKey;
+    }
     window.setTimeout(() => map.invalidateSize(), 0);
-  }, [flight, routePoints, runwayApproaches, runwayCatalog]);
+  }, [autoFitKey, flight, routePoints, runwayApproaches, runwayCatalog]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
