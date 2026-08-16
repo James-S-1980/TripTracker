@@ -121,6 +121,11 @@ function inboundStatusLabel(status: FlightLeg["inboundStatus"] | undefined): str
   return "on ground";
 }
 
+function altitudeLabel(flight: FlightLeg): string {
+  if (flight.altitudeFt) return `${flight.altitudeFt.toLocaleString()} ft`;
+  return flight.status === "En Route" ? "Altitude pending" : "Ground";
+}
+
 function aircraftPhotoUrl(tailNumber: string): string {
   return `https://www.planespotters.net/photos/reg/${encodeURIComponent(tailNumber)}`;
 }
@@ -671,7 +676,7 @@ export function App() {
 
                   <div className="compact-facts">
                     <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
-                    <span><Plane size={15} /> {activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</span>
+                    <span><Plane size={15} /> {altitudeLabel(activeFlight)}</span>
                     <span>
                       <Plane size={15} /> Tail{" "}
                       {activeTailNumber ? (
@@ -702,7 +707,7 @@ export function App() {
                   </div>
                   <dl>
                     <div><dt>Progress</dt><dd>{activeFlight.progress}%</dd></div>
-                    <div><dt>Altitude</dt><dd>{activeFlight.altitudeFt ? `${activeFlight.altitudeFt.toLocaleString()} ft` : "Ground"}</dd></div>
+                    <div><dt>Altitude</dt><dd>{altitudeLabel(activeFlight)}</dd></div>
                     <div><dt>Speed</dt><dd>{activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Pending"}</dd></div>
                     <div><dt>Updated</dt><dd>{timeAgo(activeFlight.lastUpdated)}</dd></div>
                   </dl>

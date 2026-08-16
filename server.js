@@ -1264,7 +1264,7 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
   const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
   const status = inboundStatusFromPublicFlight(publicFlight);
   const track = publicFlightTrack(publicFlight);
-  const position = track.at(-1) ?? estimatedPosition(origin, destination, status, departureTime, arrivalTime);
+  const position = publicTrackPositionWithTelemetry(track) ?? estimatedPosition(origin, destination, status, departureTime, arrivalTime);
   const tailNumber = usefulOptionalValue(publicFlight.aircraft?.tail);
 
   return {
@@ -1428,7 +1428,7 @@ function publicFlightTrack(publicFlight) {
       return {
         lat,
         lon,
-        altitudeFt: Number.isFinite(altitude) ? Math.round(altitude * 100) : 0,
+        altitudeFt: Number.isFinite(altitude) ? Math.round(altitude * 100) : undefined,
         groundSpeedMph: Number.isFinite(groundSpeed) ? Math.round(groundSpeed * 1.15078) : undefined,
         headingDeg: Number(publicFlight.heading),
         timestamp: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : undefined,
@@ -1439,6 +1439,24 @@ function publicFlightTrack(publicFlight) {
       };
     })
     .filter(Boolean);
+}
+
+function publicTrackPositionWithTelemetry(track) {
+  const latestPosition = track.at(-1);
+  if (!latestPosition) return null;
+  const latestTelemetry = [...track].reverse().find((point) => (
+    Number.isFinite(point.altitudeFt) && point.altitudeFt > 0 ||
+    Number.isFinite(point.groundSpeedMph) && point.groundSpeedMph > 0 ||
+    usefulOptionalValue(point.tailNumber)
+  ));
+  if (!latestTelemetry) return latestPosition;
+
+  return {
+    ...latestPosition,
+    altitudeFt: latestPosition.altitudeFt ?? latestTelemetry.altitudeFt,
+    groundSpeedMph: latestPosition.groundSpeedMph ?? latestTelemetry.groundSpeedMph,
+    tailNumber: latestPosition.tailNumber ?? latestTelemetry.tailNumber,
+  };
 }
 
 async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNumber, publicIdent) {
