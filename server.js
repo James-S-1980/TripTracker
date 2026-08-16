@@ -48,7 +48,7 @@ function loadLocalEnvironment() {
     const key = trimmed.slice(0, separatorIndex).trim();
     const rawValue = trimmed.slice(separatorIndex + 1).trim();
     const value = rawValue.replace(/^['"]|['"]$/g, "");
-    if (!process.env[key]) {
+    if (!process.env[key] || key.startsWith("TRIPTRACKER_")) {
       process.env[key] = value;
     }
   }
