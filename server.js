@@ -1422,8 +1422,8 @@ function publicFlightTrack(publicFlight) {
       const lon = Number(coordinates[0]);
       const lat = Number(coordinates[1]);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-      const altitude = Number(point.alt);
-      const groundSpeed = Number(point.gs);
+      const altitude = numberFromPublicTrackValue(point.alt);
+      const groundSpeed = numberFromPublicTrackValue(point.gs);
       const timestamp = Number(point.timestamp);
       return {
         lat,
@@ -1439,6 +1439,11 @@ function publicFlightTrack(publicFlight) {
       };
     })
     .filter(Boolean);
+}
+
+function numberFromPublicTrackValue(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  return Number(value);
 }
 
 function publicTrackPositionWithTelemetry(track) {
