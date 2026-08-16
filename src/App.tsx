@@ -156,6 +156,35 @@ function inboundSummary(flight: FlightLeg): string {
   return `${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`;
 }
 
+function mergeKnownFlightEnrichment(previous: FlightLeg, next: FlightLeg): FlightLeg {
+  const previousTail = previous.tailNumber ?? previous.aircraftPosition?.tailNumber;
+  const nextTail = next.tailNumber ?? next.aircraftPosition?.tailNumber;
+  const merged: FlightLeg = { ...next };
+
+  if (!nextTail && previousTail) {
+    merged.tailNumber = previousTail;
+    if (merged.aircraftPosition) {
+      merged.aircraftPosition = {
+        ...merged.aircraftPosition,
+        tailNumber: previousTail,
+      };
+    }
+  }
+
+  if (!merged.inboundFrom && previous.inboundFrom) {
+    merged.inboundFrom = previous.inboundFrom;
+    merged.inboundFlightNumber = previous.inboundFlightNumber;
+    merged.inboundStatus = previous.inboundStatus;
+    merged.inboundSource = previous.inboundSource;
+  } else if (merged.inboundFrom && previous.inboundFrom && inboundSummary(merged) === inboundSummary(previous)) {
+    merged.inboundFlightNumber = merged.inboundFlightNumber ?? previous.inboundFlightNumber;
+    merged.inboundStatus = merged.inboundStatus ?? previous.inboundStatus;
+    merged.inboundSource = merged.inboundSource ?? previous.inboundSource;
+  }
+
+  return merged;
+}
+
 function TripTrackerLogo() {
   return (
     <svg aria-hidden="true" className="triptracker-logo" viewBox="0 0 64 64">
@@ -375,7 +404,7 @@ export function App() {
     refreshed.forEach((result, index) => {
       const original = lookupFlights[index];
       if (result.status === "fulfilled") {
-        const nextFlight = landedDisplayFlight(result.value, original);
+        const nextFlight = mergeKnownFlightEnrichment(original, landedDisplayFlight(result.value, original));
         const changes = describeFlightChanges(original, nextFlight);
         refreshMap.set(original.id, nextFlight);
         soundEventsForFlightChange(original, nextFlight).forEach((eventType) => {

@@ -745,8 +745,12 @@ async function registerAndNotifyTrackedFlight(flight) {
 function registerServerTrackedFlight(flight, options = {}) {
   const args = lookupArgsFromFlight(flight);
   if (!args) return;
-  serverTrackedFlights.set(trackedFlightKey(flight), {
-    flight: compactFlightForTracking(flight),
+  const key = trackedFlightKey(flight);
+  const existingRecord = serverTrackedFlights.get(key);
+  const mergedFlight = mergeKnownFlightEnrichment(existingRecord?.flight, flight);
+  serverTrackedFlights.set(key, {
+    ...existingRecord,
+    flight: compactFlightForTracking(mergedFlight),
     airline: args.airline,
     flightNumber: args.flightNumber,
     date: flight.date,
@@ -769,21 +773,22 @@ async function pollServerTrackedFlights() {
 
       const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date);
       const displayFlight = landedDisplayFlight(nextFlight, record.flight);
-      const changes = describeServerFlightChanges(record.flight, displayFlight);
-      if (shouldConcludeLandedFlight(displayFlight)) {
-        await dispatchTextNotification("concluded", displayFlight, changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"]);
+      const mergedFlight = mergeKnownFlightEnrichment(record.flight, displayFlight);
+      const changes = describeServerFlightChanges(record.flight, mergedFlight);
+      if (shouldConcludeLandedFlight(mergedFlight)) {
+        await dispatchTextNotification("concluded", mergedFlight, changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"]);
         serverTrackedFlights.delete(key);
         saveServerTrackedFlights();
         continue;
       }
 
       if (changes.length > 0) {
-        await dispatchTextNotification("updated", displayFlight, changes);
+        await dispatchTextNotification("updated", mergedFlight, changes);
       }
 
       serverTrackedFlights.set(key, {
         ...record,
-        flight: compactFlightForTracking(displayFlight),
+        flight: compactFlightForTracking(mergedFlight),
         lastCheckedAt: new Date().toISOString(),
         lastError: undefined,
       });
@@ -806,6 +811,36 @@ function compactFlightForTracking(flight) {
     track: undefined,
     alerts: Array.isArray(flight.alerts) ? flight.alerts.slice(0, 4) : [],
   };
+}
+
+function mergeKnownFlightEnrichment(previous, next) {
+  if (!previous || !next) return next;
+  const previousTail = usefulOptionalValue(previous.tailNumber) || usefulOptionalValue(previous.aircraftPosition?.tailNumber);
+  const nextTail = usefulOptionalValue(next.tailNumber) || usefulOptionalValue(next.aircraftPosition?.tailNumber);
+  const merged = { ...next };
+
+  if (!nextTail && previousTail) {
+    merged.tailNumber = previousTail;
+    if (merged.aircraftPosition) {
+      merged.aircraftPosition = {
+        ...merged.aircraftPosition,
+        tailNumber: previousTail,
+      };
+    }
+  }
+
+  if (!merged.inboundFrom && previous.inboundFrom) {
+    merged.inboundFrom = previous.inboundFrom;
+    merged.inboundFlightNumber = previous.inboundFlightNumber;
+    merged.inboundStatus = previous.inboundStatus;
+    merged.inboundSource = previous.inboundSource;
+  } else if (merged.inboundFrom && previous.inboundFrom && inboundNotificationSummary(merged) === inboundNotificationSummary(previous)) {
+    merged.inboundFlightNumber = merged.inboundFlightNumber ?? previous.inboundFlightNumber;
+    merged.inboundStatus = merged.inboundStatus ?? previous.inboundStatus;
+    merged.inboundSource = merged.inboundSource ?? previous.inboundSource;
+  }
+
+  return merged;
 }
 
 function landedDisplayFlight(flight, previous) {
