@@ -7,7 +7,9 @@
     "dev": "concurrently -k -n api,web \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "node server.js",
     "dev:web": "vite --host 127.0.0.1",
+    "generate:airlines": "node scripts/generate-airlines.mjs",
     "generate:airports": "node scripts/generate-airports.mjs",
+    "generate:runways": "node scripts/generate-runways.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server.js"
@@ -17,6 +19,7 @@
     "express": "^5.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.539.0",
+    "nodemailer": "^9.0.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "typescript": "^5.9.2",

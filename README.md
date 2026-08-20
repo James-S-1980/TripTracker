@@ -38,6 +38,20 @@ FlightAware-backed lookups can include live aircraft position and track data. Tr
 
 Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude. When no FlightAware or ADS-B position is available, TripTracker labels the aircraft map marker as estimated from schedule.
 
+## Text notifications
+
+TripTracker can send email-to-text notifications when a flight is first tracked and when tracked flight status, gate, time, tail, or inbound details change. SMTP credentials are read only from server environment variables and should not be committed.
+
+```bash
+$env:TRIPTRACKER_SMTP_USER="James.schliesske@gmail.com"
+$env:TRIPTRACKER_SMTP_APP_PASSWORD="your-gmail-app-password"
+$env:TRIPTRACKER_SMS_TO="James.schliesske@gmail.com"
+npm run build
+npm start
+```
+
+On the local hosted Windows server, use `.\start-triptracker-local.ps1` so the process reads the saved user-level environment variables before starting.
+
 ## Build
 
 ```bash
@@ -56,3 +70,16 @@ Generated files:
 
 - `src/airportCatalog.generated.json`
 - `src/airportCatalog.generated.ts`
+
+## Airline catalog
+
+The airline catalog is generated from OpenFlights airline data plus overrides for common current passenger and cargo carriers. It supports matching by airline name, IATA code, ICAO code, callsign, aliases, and country. The server uses the same generated data to convert IATA codes such as `AC` to provider-friendly ICAO identifiers such as `ACA`; cargo entries include carriers such as UPS Airlines (`5X`/`UPS`) and FedEx Express (`FX`/`FDX`).
+
+```bash
+npm run generate:airlines
+```
+
+Generated files:
+
+- `src/airlineCatalog.generated.json`
+- `src/airlineCatalog.generated.ts`

@@ -1,4 +1,4 @@
-export type FlightStatus = "Scheduled" | "Boarding" | "En Route" | "Delayed" | "Arrived" | "Cancelled";
+export type FlightStatus = "Scheduled" | "Boarding" | "En Route" | "Delayed" | "Landed" | "Arrived" | "Cancelled";
 
 export type Airport = {
   code: string;
@@ -38,6 +38,7 @@ export type FlightLeg = {
   lastUpdated: string;
   dataSource: string;
   sourceUrl?: string;
+  landedAt?: string;
   alerts: FlightAlert[];
 };
 
@@ -48,13 +49,35 @@ export type AircraftPosition = {
   groundSpeedMph?: number;
   headingDeg?: number;
   timestamp?: string;
-  source: "FlightAware live position" | "FlightAware track" | "Airplanes.live ADS-B" | "Estimated from schedule";
+  source: "FlightAware live position" | "FlightAware track" | "FlightAware public track" | "Airplanes.live ADS-B" | "ADSB.lol ADS-B" | "ADS-B" | "Estimated from schedule";
   callsign?: string;
   aircraftHex?: string;
   tailNumber?: string;
   seenPositionSeconds?: number;
   crossTrackMiles?: number;
 };
+
+export type RunwayEnd = {
+  ident: string;
+  lat: number;
+  lon: number;
+  headingDeg: number;
+  displacedThresholdFt?: number;
+};
+
+export type AirportRunway = {
+  id: string;
+  airportCode: string;
+  ident: string;
+  lengthFt?: number;
+  widthFt?: number;
+  surface?: string;
+  lighted: boolean;
+  le?: RunwayEnd | null;
+  he?: RunwayEnd | null;
+};
+
+export type RunwayCatalog = Record<string, AirportRunway[]>;
 
 export type FlightAlert = {
   id: string;
