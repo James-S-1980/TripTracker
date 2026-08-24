@@ -625,6 +625,14 @@ app.post(["/api/notifications/register-tracked", "/trip/api/notifications/regist
   response.json({ ok: true, registered, serverTrackedFlights: serverTrackedFlights.size });
 });
 
+app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], (request, response) => {
+  pruneConcludedServerTrackedFlights();
+  response.json({
+    flights: serverTrackedFlightList(),
+    serverTrackedFlights: serverTrackedFlights.size,
+  });
+});
+
 app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (request, response) => {
   const flight = request.body?.flight;
   const key = flight ? trackedFlightKey(flight) : String(request.body?.key ?? "");
@@ -757,6 +765,24 @@ function registerServerTrackedFlight(flight, options = {}) {
     lastCheckedAt: new Date().toISOString(),
   });
   if (options.persist !== false) saveServerTrackedFlights();
+}
+
+function serverTrackedFlightList() {
+  return [...serverTrackedFlights.values()]
+    .map((record) => record.flight)
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.lastUpdated ?? b.departureTime ?? 0).getTime() - new Date(a.lastUpdated ?? a.departureTime ?? 0).getTime());
+}
+
+function pruneConcludedServerTrackedFlights() {
+  let changed = false;
+  for (const [key, record] of [...serverTrackedFlights.entries()]) {
+    if (shouldConcludeLandedFlight(record.flight)) {
+      serverTrackedFlights.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) saveServerTrackedFlights();
 }
 
 async function pollServerTrackedFlights() {

@@ -44,6 +44,13 @@ export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void
   }).catch(() => undefined);
 }
 
+export async function fetchTrackedFlights(): Promise<FlightLeg[]> {
+  const response = await fetch(`${apiBase()}/tracked-flights`);
+  if (!response.ok) return [];
+  const payload = await response.json().catch(() => null) as { flights?: FlightLeg[] } | null;
+  return Array.isArray(payload?.flights) ? payload.flights : [];
+}
+
 export async function untrackFlight(flight: FlightLeg): Promise<void> {
   await fetch(`${apiBase()}/notifications/untrack`, {
     method: "POST",

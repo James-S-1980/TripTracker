@@ -2,7 +2,7 @@ import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, Refr
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { fetchAirportRunways, lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportRunways, fetchTrackedFlights, lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { AirportRunway, FlightLeg, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -156,7 +156,8 @@ function inboundSummary(flight: FlightLeg): string {
   return `${flight.inboundFrom.code}${flight.inboundFlightNumber ? ` via ${flight.inboundFlightNumber}` : ""}${flight.inboundStatus ? ` ${flight.inboundStatus}` : ""}`;
 }
 
-function mergeKnownFlightEnrichment(previous: FlightLeg, next: FlightLeg): FlightLeg {
+function mergeKnownFlightEnrichment(previous: FlightLeg | undefined, next: FlightLeg): FlightLeg {
+  if (!previous) return next;
   const previousTail = previous.tailNumber ?? previous.aircraftPosition?.tailNumber;
   const nextTail = next.tailNumber ?? next.aircraftPosition?.tailNumber;
   const merged: FlightLeg = { ...next };
@@ -271,6 +272,21 @@ function replaceFlightStatusAlert(flight: FlightLeg, status: FlightLeg["status"]
   return [statusAlert, ...flight.alerts.filter((alert) => alert.type !== "status")];
 }
 
+function mergeTrackedFlightLists(localFlights: FlightLeg[], serverFlights: FlightLeg[]): FlightLeg[] {
+  const merged = new Map<string, FlightLeg>();
+  localFlights.forEach((flight) => {
+    if (!shouldRemoveLandedFlight(flight)) merged.set(flight.id, flight);
+  });
+  serverFlights.forEach((flight) => {
+    if (!shouldRemoveLandedFlight(flight)) {
+      merged.set(flight.id, mergeKnownFlightEnrichment(merged.get(flight.id), flight));
+    }
+  });
+  return [...merged.values()].sort((a, b) => (
+    new Date(b.lastUpdated ?? b.departureTime).getTime() - new Date(a.lastUpdated ?? a.departureTime).getTime()
+  ));
+}
+
 export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
@@ -319,6 +335,27 @@ export function App() {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
     void registerTrackedFlights(flights);
   }, [flights]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTrackedFlights()
+      .then((serverFlights) => {
+        if (cancelled || serverFlights.length === 0) return;
+        setFlights((current) => {
+          const nextFlights = mergeTrackedFlightLists(current, serverFlights);
+          setActiveId((currentActiveId) => (
+            currentActiveId && nextFlights.some((flight) => flight.id === currentActiveId)
+              ? currentActiveId
+              : nextFlights[0]?.id ?? null
+          ));
+          return nextFlights;
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (flights.length === 0) return;
