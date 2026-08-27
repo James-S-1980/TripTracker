@@ -499,6 +499,10 @@ function chooseFlight(flights, requestedDate, selectedFlightId) {
 
 function ambiguousFlightLookup(flights, ident, date) {
   const mappedFlights = flights.map((flight) => mapFlightAwareFlight(flight, date));
+  return ambiguousFlightLookupFromMappedFlights(mappedFlights, ident, date);
+}
+
+function ambiguousFlightLookupFromMappedFlights(mappedFlights, ident, date) {
   return {
     ambiguous: true,
     message: `${mappedFlights.length} matching ${ident} flights were found for ${date}. Select the route you want to track.`,
@@ -560,7 +564,7 @@ async function lookupFlightData(requestedAirline, flightNumber, date, options = 
     return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
 
-  const webFlight = await lookupWebFlight(ident, airline, flightNumber, date).catch((error) => {
+  const webFlight = await lookupWebFlight(ident, airline, flightNumber, date, options).catch((error) => {
     errors.push(error instanceof Error ? error.message : "Web search lookup failed.");
     return null;
   });
@@ -1291,9 +1295,29 @@ async function lookupFlightAware(ident, date, options = {}) {
   return flight ? enrichFlightAwarePosition(mapFlightAwareFlight(flight, date), apiKey) : null;
 }
 
-async function lookupWebFlight(ident, airline, flightNumber, date) {
+async function lookupWebFlight(ident, airline, flightNumber, date, options = {}) {
   const errors = [];
   const candidateDates = webLookupDates(date);
+
+  for (const lookupDate of candidateDates) {
+    try {
+      const flightStatsUrl = flightStatsUrlFor(airline, flightNumber, lookupDate);
+      const flightStatsResponse = await fetch(flightStatsUrl, { headers: browserHeaders() });
+      if (!flightStatsResponse.ok) {
+        throw new Error(`FlightStats returned ${flightStatsResponse.status}.`);
+      }
+      const html = await flightStatsResponse.text();
+      const candidates = parseFlightStatsSegmentCandidates(html, ident, airline, flightNumber, lookupDate, flightStatsUrl);
+      if (options.selectedFlightId) {
+        const selected = candidates.find((candidate) => candidate.id === options.selectedFlightId);
+        if (selected) return selected;
+      } else if (options.allowAmbiguous && candidates.length > 1) {
+        return ambiguousFlightLookupFromMappedFlights(candidates, ident, lookupDate);
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? `FlightStats candidates ${lookupDate}: ${error.message}` : `FlightStats candidates ${lookupDate}: parse failed.`);
+    }
+  }
 
   for (const lookupDate of candidateDates) {
     try {
@@ -1728,6 +1752,75 @@ function parseGoogleFlightCard(html, ident, airline, flightNumber, date, sourceU
       },
     ],
   };
+}
+
+function parseFlightStatsSegmentCandidates(html, ident, airline, flightNumber, date, sourceUrl) {
+  const [year, month, day] = date.split("-");
+  const candidates = [];
+  const rowPattern = /<a[^>]+href="([^"]*\/v2\/flight-tracker\/[^"]*flightId=\d+[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = rowPattern.exec(html))) {
+    const href = decodeHtml(match[1]).replace(/&amp;/g, "&");
+    let url;
+    try {
+      url = new URL(href, "https://www.flightstats.com");
+    } catch {
+      continue;
+    }
+    if (!url.pathname.toUpperCase().endsWith(`/${airline}/${flightNumber}`)) continue;
+    if (url.searchParams.get("year") !== year) continue;
+    if (Number(url.searchParams.get("month")) !== Number(month)) continue;
+    if (Number(url.searchParams.get("date")) !== Number(day)) continue;
+
+    const text = plainText(match[2]);
+    const row = text.match(/^(\d{1,2}:\d{2})\s+[A-Z]{2,4}\s+([A-Z0-9]{3})\s+(.+?)\s+([A-Z0-9]{3})\s+(.+?)\s+(\d{1,2}:\d{2})\s+[A-Z]{2,4}$/i);
+    if (!row) continue;
+
+    const [, departureWallTime, originCode, originCity, destinationCode, destinationCity, arrivalWallTime] = row;
+    const origin = airportForRouteCode(originCode.toUpperCase(), `${originCity} ${originCode}`);
+    const destination = airportForRouteCode(destinationCode.toUpperCase(), `${destinationCity} ${destinationCode}`);
+    const times = normalizeFlightTimeRange(
+      wallTimeToUtcIso(date, departureWallTime, origin.timeZone),
+      wallTimeToUtcIso(date, arrivalWallTime, destination.timeZone),
+    );
+    const status = findStatus(text);
+    const id = `flightstats-${ident}-${date}-${url.searchParams.get("flightId")}`;
+    candidates.push({
+      id,
+      airline: airlineNameFromCode(airline),
+      airlineCode: airline,
+      airlineLogoUrl: airlineLogoFor(airline),
+      flightNumber: `${airline} ${flightNumber}`,
+      date,
+      origin,
+      destination,
+      departureTime: times.departureTime,
+      arrivalTime: times.arrivalTime,
+      boardingGate: "TBD",
+      arrivalGate: "TBD",
+      terminal: "TBD",
+      arrivalTerminal: "TBD",
+      status,
+      progress: progressFromTimes(status, times.departureTime, times.arrivalTime),
+      altitudeFt: 0,
+      groundSpeedMph: 0,
+      aircraftPosition: estimatedPosition(origin, destination, status, times.departureTime, times.arrivalTime),
+      lastUpdated: new Date().toISOString(),
+      dataSource: "FlightStats schedule list, powered by Cirium",
+      sourceUrl: url.toString(),
+      alerts: [
+        {
+          id: `${id}-status`,
+          type: "status",
+          priority: status === "Delayed" || status === "Cancelled" ? "critical" : "high",
+          title: status,
+          message: `Parsed ${origin.code} to ${destination.code} from FlightStats same-day segment list.`,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
+  }
+  return candidates;
 }
 
 function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUrl) {
