@@ -386,6 +386,48 @@ button:disabled {
   text-transform: none;
 }
 
+.flight-choices {
+  display: grid;
+  gap: 8px;
+}
+
+.flight-choice {
+  background: #111922;
+  border: 1px solid #344650;
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  justify-content: stretch;
+  min-height: 58px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.flight-choice:hover:not(:disabled) {
+  background: #17222c;
+}
+
+.flight-choice span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.flight-choice strong,
+.flight-choice em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flight-choice em {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .section-heading {
   align-items: center;
   color: var(--ink);

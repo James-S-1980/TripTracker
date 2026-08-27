@@ -481,21 +481,47 @@ function bearingRadians(latA, lonA, latB, lonB) {
   );
 }
 
-function chooseFlight(flights, requestedDate) {
+function flightsForRequestedDate(flights, requestedDate) {
   const target = requestedDate.slice(0, 10);
-  return flights.find((flight) => (
-    (flight.scheduled_out ?? flight.scheduled_off ?? "").startsWith(target)
-  )) ?? flights[0];
+  const matchingFlights = flights.filter((flight) => (
+    (flight.scheduled_out ?? flight.scheduled_off ?? flight.estimated_out ?? flight.estimated_off ?? "").startsWith(target)
+  ));
+  return matchingFlights.length > 0 ? matchingFlights : flights;
+}
+
+function chooseFlight(flights, requestedDate, selectedFlightId) {
+  if (selectedFlightId) {
+    const selected = flights.find((flight) => flight.fa_flight_id === selectedFlightId);
+    if (selected) return selected;
+  }
+  return flightsForRequestedDate(flights, requestedDate)[0];
+}
+
+function ambiguousFlightLookup(flights, ident, date) {
+  const mappedFlights = flights.map((flight) => mapFlightAwareFlight(flight, date));
+  return {
+    ambiguous: true,
+    message: `${mappedFlights.length} matching ${ident} flights were found for ${date}. Select the route you want to track.`,
+    flights: mappedFlights,
+  };
 }
 
 app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, response) => {
   const requestedAirline = String(request.query.airline ?? "").toUpperCase();
   const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
   const date = String(request.query.date ?? new Date().toISOString().slice(0, 10));
+  const selectedFlightId = String(request.query.flightId ?? "").trim();
   const shouldTrack = String(request.query.track ?? "").toLowerCase() === "true";
   const shouldMonitor = String(request.query.monitor ?? "").toLowerCase() === "true";
   try {
-    const flight = await lookupFlightData(requestedAirline, flightNumber, date);
+    const flight = await lookupFlightData(requestedAirline, flightNumber, date, {
+      allowAmbiguous: shouldTrack && !selectedFlightId,
+      selectedFlightId,
+    });
+    if (flight?.ambiguous) {
+      response.status(409).json(flight);
+      return;
+    }
     if (shouldTrack) {
       await registerAndNotifyTrackedFlight(flight);
     } else if (shouldMonitor) {
@@ -519,16 +545,17 @@ app.get(["/api/runways", "/trip/api/runways"], (request, response) => {
   response.json(Object.fromEntries(uniqueAirportCodes.map((code) => [code, generatedRunways[code] ?? []])));
 });
 
-async function lookupFlightData(requestedAirline, flightNumber, date) {
+async function lookupFlightData(requestedAirline, flightNumber, date, options = {}) {
   const airline = normalizeAirlineCode(String(requestedAirline ?? "").toUpperCase());
   const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
   const errors = [];
 
-  const flightAwareFlight = await lookupFlightAware(ident, date).catch((error) => {
+  const flightAwareFlight = await lookupFlightAware(ident, date, options).catch((error) => {
     errors.push(error instanceof Error ? error.message : "FlightAware lookup failed.");
     return null;
   });
   if (flightAwareFlight) {
+    if (flightAwareFlight.ambiguous) return flightAwareFlight;
     const enrichedFlight = await enrichFlightAwarePublicMetadata(flightAwareFlight, ident).catch(() => flightAwareFlight);
     return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
@@ -797,7 +824,7 @@ async function pollServerTrackedFlights() {
         continue;
       }
 
-      const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date);
+      const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date, { selectedFlightId: record.flight?.id });
       const displayFlight = landedDisplayFlight(nextFlight, record.flight);
       const mergedFlight = mergeKnownFlightEnrichment(record.flight, displayFlight);
       const changes = describeServerFlightChanges(record.flight, mergedFlight);
@@ -1230,10 +1257,15 @@ function gateText(terminal, gate) {
   return "Pending";
 }
 
-async function lookupFlightAware(ident, date) {
+async function lookupFlightAware(ident, date, options = {}) {
   const apiKey = process.env.FLIGHTAWARE_AEROAPI_KEY;
   if (!apiKey) {
     throw new Error("FlightAware API key is not configured.");
+  }
+
+  if (options.selectedFlightId) {
+    const selectedFlight = await fetchFlightAwareFlightById(options.selectedFlightId, apiKey);
+    return selectedFlight ? enrichFlightAwarePosition(mapFlightAwareFlight(selectedFlight, date), apiKey) : null;
   }
 
   const params = new URLSearchParams({
@@ -1251,6 +1283,10 @@ async function lookupFlightAware(ident, date) {
   }
 
   const payload = await flightAwareResponse.json();
+  const candidates = flightsForRequestedDate(payload.flights ?? [], date);
+  if (options.allowAmbiguous && candidates.length > 1) {
+    return ambiguousFlightLookup(candidates, ident, date);
+  }
   const flight = chooseFlight(payload.flights ?? [], date);
   return flight ? enrichFlightAwarePosition(mapFlightAwareFlight(flight, date), apiKey) : null;
 }

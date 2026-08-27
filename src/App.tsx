@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
 import { fetchAirportRunways, fetchTrackedFlights, lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
-import type { AirportRunway, FlightLeg, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
+import type { AirportRunway, FlightLeg, FlightLookupResult, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
@@ -59,6 +59,17 @@ function timeAgo(value: string): string {
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
+function isAmbiguousLookup(result: FlightLookupResult): result is Extract<FlightLookupResult, { ambiguous: true }> {
+  return "ambiguous" in result && result.ambiguous === true;
+}
+
+function requireSingleFlight(result: FlightLookupResult): FlightLeg {
+  if (isAmbiguousLookup(result)) {
+    throw new Error(result.message);
+  }
+  return result;
 }
 
 function formatTimestamp(value: string | null): string {
@@ -301,6 +312,7 @@ export function App() {
   const [airlineFocused, setAirlineFocused] = useState(false);
   const [flightFocused, setFlightFocused] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [flightChoices, setFlightChoices] = useState<FlightLeg[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
@@ -391,10 +403,39 @@ export function App() {
     void primeAudio();
     setIsLoading(true);
     setLookupError(null);
+    setFlightChoices([]);
     try {
-      const flight = landedDisplayFlight(await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true }));
+      const result = await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true });
+      if (isAmbiguousLookup(result)) {
+        setFlightChoices(result.flights);
+        setLookupError(result.message);
+        return;
+      }
+      const flight = landedDisplayFlight(result);
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
+      setLastRefreshAt(new Date().toISOString());
+    } catch (error) {
+      setLookupError(error instanceof Error ? error.message : "No live flight data found.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function trackSelectedFlight(choice: FlightLeg) {
+    void primeAudio();
+    setIsLoading(true);
+    setLookupError(null);
+    try {
+      const flight = landedDisplayFlight(requireSingleFlight(await lookupFlight(
+        choice.airlineCode,
+        choice.flightNumber.split(" ")[1] ?? flightNumber.trim(),
+        choice.date,
+        { track: true, flightId: choice.id },
+      )));
+      setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
+      setActiveId(flight.id);
+      setFlightChoices([]);
       setLastRefreshAt(new Date().toISOString());
     } catch (error) {
       setLookupError(error instanceof Error ? error.message : "No live flight data found.");
@@ -428,7 +469,7 @@ export function App() {
     const lookupFlights = flightsToRefresh.filter((flight) => !expiredLandedIds.has(flight.id));
     const refreshed = await Promise.allSettled(lookupFlights.map((flight) => {
       const [code, number] = splitFlightDesignator(flight.flightNumber);
-      return lookupFlight(code, number, flight.date, { monitor: true });
+      return lookupFlight(code, number, flight.date, { monitor: true, flightId: flight.id }).then(requireSingleFlight);
     }));
     const refreshMap = new Map<string, FlightLeg>();
     const concludedIds = new Set<string>(expiredLandedIds);
@@ -605,7 +646,10 @@ export function App() {
                 <input
                   value={airline}
                   onBlur={() => window.setTimeout(() => setAirlineFocused(false), 120)}
-                  onChange={(event) => setAirline(event.target.value)}
+                  onChange={(event) => {
+                    setAirline(event.target.value);
+                    setFlightChoices([]);
+                  }}
                   onFocus={() => setAirlineFocused(true)}
                   placeholder="Enter Airline"
                 />
@@ -628,7 +672,10 @@ export function App() {
                 <input
                   value={flightNumber}
                   onBlur={() => window.setTimeout(() => setFlightFocused(false), 120)}
-                  onChange={(event) => setFlightNumber(event.target.value.replace(/\D/g, ""))}
+                  onChange={(event) => {
+                    setFlightNumber(event.target.value.replace(/\D/g, ""));
+                    setFlightChoices([]);
+                  }}
                   onFocus={() => setFlightFocused(true)}
                   inputMode="numeric"
                   placeholder="Enter flight number"
@@ -647,13 +694,38 @@ export function App() {
             </label>
             <label>
               Date
-              <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+              <input type="date" value={date} onChange={(event) => {
+                setDate(event.target.value);
+                setFlightChoices([]);
+              }} />
             </label>
             <button type="submit" disabled={isLoading}>
               <Search size={17} />
               {isLoading ? "Checking" : "Track flight"}
             </button>
             {lookupError && <p className="lookup-error">{lookupError}</p>}
+            {flightChoices.length > 0 && (
+              <div className="flight-choices">
+                {flightChoices.map((choice) => (
+                  <button
+                    className="flight-choice"
+                    disabled={isLoading}
+                    key={choice.id}
+                    onClick={() => void trackSelectedFlight(choice)}
+                    type="button"
+                  >
+                    <span>
+                      <strong>{choice.origin.code} to {choice.destination.code}</strong>
+                      <em>{choice.origin.city} to {choice.destination.city}</em>
+                    </span>
+                    <span>
+                      <strong>{formatZonedTime(choice.departureTime, choice.origin.timeZone)}</strong>
+                      <em>{choice.status}</em>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </form>
 
           <div className="section-heading">

@@ -1,15 +1,16 @@
 import { resolveAirline } from "./airlines";
-import type { FlightLeg, RunwayCatalog } from "./types";
+import type { FlightLeg, FlightLookupResult, RunwayCatalog } from "./types";
 
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
 }
 
-export async function lookupFlight(airlineInput: string, flightNumber: string, date: string, options: { track?: boolean; monitor?: boolean } = {}): Promise<FlightLeg> {
+export async function lookupFlight(airlineInput: string, flightNumber: string, date: string, options: { track?: boolean; monitor?: boolean; flightId?: string } = {}): Promise<FlightLookupResult> {
   const airline = resolveAirline(airlineInput);
   const params = new URLSearchParams({ airline: airline.code, flightNumber, date });
   if (options.track) params.set("track", "true");
   if (options.monitor) params.set("monitor", "true");
+  if (options.flightId) params.set("flightId", options.flightId);
   let response: Response;
   try {
     response = await fetch(`${apiBase()}/flights/lookup?${params.toString()}`);
@@ -18,9 +19,10 @@ export async function lookupFlight(airlineInput: string, flightNumber: string, d
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    if (payload && "ambiguous" in payload) return payload as FlightLookupResult;
     throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? `Flight lookup failed with HTTP ${response.status}.`);
   }
-  return await response.json() as FlightLeg;
+  return await response.json() as FlightLookupResult;
 }
 
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {

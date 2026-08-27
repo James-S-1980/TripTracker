@@ -42,6 +42,12 @@ export type FlightLeg = {
   alerts: FlightAlert[];
 };
 
+export type FlightLookupResult = FlightLeg | {
+  ambiguous: true;
+  flights: FlightLeg[];
+  message: string;
+};
+
 export type AircraftPosition = {
   lat: number;
   lon: number;
