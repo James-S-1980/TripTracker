@@ -219,7 +219,7 @@ async function enrichFlightAwarePosition(mappedFlight, apiKey) {
 }
 
 async function enrichAdsbPosition(mappedFlight, requestedIdent) {
-  if (!isTrackableInFlight(mappedFlight)) {
+  if (mappedFlight.status === "Arrived" || mappedFlight.status === "Cancelled") {
     return mappedFlight;
   }
 
@@ -1310,7 +1310,7 @@ async function lookupWebFlight(ident, airline, flightNumber, date, options = {})
       const candidates = parseFlightStatsSegmentCandidates(html, ident, airline, flightNumber, lookupDate, flightStatsUrl);
       if (options.selectedFlightId) {
         const selected = candidates.find((candidate) => candidate.id === options.selectedFlightId);
-        if (selected) return selected;
+        if (selected) return await enrichFlightStatsSegmentCandidate(selected, ident, airline, flightNumber, lookupDate);
       } else if (options.allowAmbiguous && candidates.length > 1) {
         return ambiguousFlightLookupFromMappedFlights(candidates, ident, lookupDate);
       }
@@ -1823,7 +1823,23 @@ function parseFlightStatsSegmentCandidates(html, ident, airline, flightNumber, d
   return candidates;
 }
 
-function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUrl) {
+async function enrichFlightStatsSegmentCandidate(candidate, ident, airline, flightNumber, date) {
+  if (!candidate?.sourceUrl) return candidate;
+  const response = await fetch(candidate.sourceUrl, { headers: browserHeaders() });
+  if (!response.ok) return candidate;
+  const html = await response.text();
+  try {
+    const detailedFlight = parseFlightStatsPage(html, ident, airline, flightNumber, date, candidate.sourceUrl, candidate.id);
+    if (detailedFlight.origin.code !== candidate.origin.code || detailedFlight.destination.code !== candidate.destination.code) {
+      return candidate;
+    }
+    return mergeKnownFlightEnrichment(candidate, detailedFlight);
+  } catch {
+    return candidate;
+  }
+}
+
+function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUrl, flightId) {
   const text = plainText(html);
   const route = findFlightStatsRoute(text, airline, flightNumber) ?? findRoute(text);
   if (!route) {
@@ -1859,7 +1875,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
   const speedMph = Math.round(Number(speedText ?? 0) * 1.15078);
 
   return {
-    id: `flightstats-${ident}-${date}`,
+    id: flightId ?? `flightstats-${ident}-${date}`,
     airline: airlineNameFromCode(airline),
     airlineCode: airline,
     airlineLogoUrl: airlineLogoFor(airline),
