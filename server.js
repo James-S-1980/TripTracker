@@ -228,12 +228,30 @@ async function enrichAdsbPosition(mappedFlight, requestedIdent) {
     return mappedFlight;
   }
 
+  const directCallsignMatch = await findAdsbPositionByCallsigns(identifiers, mappedFlight).catch(() => null);
+  if (directCallsignMatch) {
+    const source = directCallsignMatch.source;
+    const dataSource = mappedFlight.dataSource.includes(source)
+      ? mappedFlight.dataSource
+      : `${mappedFlight.dataSource} + ${source}`;
+    return {
+      ...mappedFlight,
+      aircraftPosition: directCallsignMatch,
+      altitudeFt: directCallsignMatch.altitudeFt ?? mappedFlight.altitudeFt,
+      groundSpeedMph: directCallsignMatch.groundSpeedMph ?? mappedFlight.groundSpeedMph,
+      tailNumber: mappedFlight.tailNumber ?? directCallsignMatch.tailNumber,
+      lastUpdated: new Date().toISOString(),
+      dataSource,
+    };
+  }
+
   const searchPoints = routeSearchPoints(mappedFlight.origin, mappedFlight.destination);
   const aircraftLists = await Promise.all(
     searchPoints.map((point) => fetchAdsbPoint(point.lat, point.lon, point.radiusNm).catch(() => [])),
   );
   const aircraft = dedupeAircraft(aircraftLists.flat());
-  const match = bestAdsbMatch(aircraft, identifiers, mappedFlight);
+  const match = bestAdsbMatch(aircraft, identifiers, mappedFlight) ??
+    await findAirportSurfaceTailForTurnaround(mappedFlight.origin, mappedFlight.destination, mappedFlight.airlineCode, identifiers);
   if (!match) {
     return mappedFlight;
   }
@@ -371,6 +389,34 @@ async function fetchAdsbPoint(lat, lon, radiusNm) {
   return aircraft;
 }
 
+async function fetchAdsbCallsign(callsign) {
+  const normalized = compactIdent(callsign);
+  if (!normalized) return [];
+  const key = `callsign:${normalized}`;
+  const cached = adsbPointCache.get(key);
+  const now = Date.now();
+  if (cached && now - cached.fetchedAt < adsbCacheMs) {
+    return cached.aircraft;
+  }
+
+  const aircraft = [];
+  for (const provider of adsbProviders()) {
+    const url = `${provider.baseUrl}/callsign/${encodeURIComponent(normalized)}`;
+    try {
+      const response = await fetch(url, { headers: provider.headers });
+      if (!response.ok) continue;
+      const payload = await response.json();
+      const providerAircraft = Array.isArray(payload.ac) ? payload.ac : [];
+      aircraft.push(...providerAircraft.map((item) => ({ ...item, _triptrackerAdsbSource: provider.name })));
+    } catch {
+      // Keep the provider chain best-effort; callsign endpoints are public and can throttle.
+    }
+  }
+  adsbPointCache.set(key, { fetchedAt: now, aircraft });
+  pruneAdsbCache(now);
+  return aircraft;
+}
+
 function adsbProviders() {
   return [
     {
@@ -444,6 +490,36 @@ function bestAdsbMatch(aircraft, identifiers, flight) {
   if (!best) return null;
   const { score, ...position } = best;
   return position;
+}
+
+function aircraftPositionFromAdsbItem(item, source, origin, destination) {
+  const lat = Number(item.lat);
+  const lon = Number(item.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const seenPositionSeconds = Number(item.seen_pos ?? item.seen ?? 0);
+  const altitudeFt = normalizeAdsbAltitude(item.alt_baro ?? item.alt_geom);
+  return {
+    lat,
+    lon,
+    altitudeFt,
+    groundSpeedMph: Number.isFinite(Number(item.gs)) ? Math.round(Number(item.gs) * 1.15078) : undefined,
+    headingDeg: Number(item.track),
+    timestamp: new Date(Date.now() - Math.max(0, seenPositionSeconds) * 1000).toISOString(),
+    source: source ?? item._triptrackerAdsbSource ?? "ADS-B",
+    callsign: cleanAdsbCallsign(item),
+    aircraftHex: item.hex ?? undefined,
+    tailNumber: usefulOptionalValue(item.r),
+    seenPositionSeconds: Number.isFinite(seenPositionSeconds) ? seenPositionSeconds : undefined,
+    crossTrackMiles: origin && destination ? Math.round(crossTrackMiles(origin, destination, { lat, lon })) : undefined,
+  };
+}
+
+async function findAdsbPositionByCallsigns(identifiers, flight) {
+  const aircraftLists = await Promise.all(
+    identifiers.map((identifier) => fetchAdsbCallsign(identifier).catch(() => [])),
+  );
+  const aircraft = dedupeAircraft(aircraftLists.flat());
+  return bestAdsbMatch(aircraft, identifiers, flight);
 }
 
 function cleanAdsbCallsign(aircraft) {
@@ -1462,13 +1538,35 @@ async function enrichFlightAwarePublicMetadata(mappedFlight, ident) {
     };
   }
   const inboundFlightNumber = flightNumberFromPublicIdent(inboundFlight.displayIdent ?? inboundFlight.ident);
+  const outboundIdentifiers = callsignCandidates(mappedFlight, ident);
+  const inboundIdentifiers = callsignCandidates({
+    airlineCode: inboundFlightNumber?.split(" ")[0],
+    flightNumber: inboundFlightNumber,
+    origin: inboundFrom,
+    destination: mappedFlight.origin,
+  }, inboundFlight.displayIdent ?? inboundFlight.ident);
+  const directInboundPosition = await findAdsbPositionByCallsigns(
+    [...outboundIdentifiers, ...inboundIdentifiers],
+    { origin: inboundFrom, destination: mappedFlight.origin },
+  ).catch(() => null);
+  const surfaceTurnaroundPosition = await findAirportSurfaceTailForTurnaround(
+    mappedFlight.origin,
+    mappedFlight.destination,
+    mappedFlight.airlineCode,
+    [...outboundIdentifiers, ...inboundIdentifiers],
+  ).catch(() => null);
   const inboundTailNumber = tailNumber ??
     usefulOptionalValue(inboundFlight.aircraft?.tail) ??
+    usefulOptionalValue(directInboundPosition?.tailNumber) ??
+    usefulOptionalValue(surfaceTurnaroundPosition?.tailNumber) ??
     await findAdsbTailForInboundFlight(inboundFrom, mappedFlight.origin, inboundFlightNumber, inboundFlight.displayIdent ?? inboundFlight.ident).catch(() => undefined);
 
   return {
     ...mappedFlight,
     tailNumber: inboundTailNumber,
+    aircraftPosition: mappedFlight.aircraftPosition ?? directInboundPosition ?? surfaceTurnaroundPosition ?? undefined,
+    altitudeFt: mappedFlight.altitudeFt || directInboundPosition?.altitudeFt || surfaceTurnaroundPosition?.altitudeFt || 0,
+    groundSpeedMph: mappedFlight.groundSpeedMph || directInboundPosition?.groundSpeedMph || surfaceTurnaroundPosition?.groundSpeedMph || 0,
     inboundFrom,
     inboundFlightNumber,
     inboundStatus: inboundStatusFromPublicFlight(inboundFlight),
@@ -1603,6 +1701,34 @@ async function findAdsbTailForInboundFlight(origin, destination, inboundFlightNu
   const aircraft = dedupeAircraft(aircraftLists.flat());
   const match = bestAdsbMatch(aircraft, identifiers, { origin, destination });
   return usefulOptionalValue(match?.tailNumber);
+}
+
+async function findAirportSurfaceTailForTurnaround(origin, destination, airlineCode, identifiers = []) {
+  if (!origin || !destination) return null;
+  const aircraft = dedupeAircraft(await fetchAdsbPoint(origin.lat, origin.lon, 12).catch(() => []));
+  const identifierSet = new Set(identifiers.map(compactIdent).filter(Boolean));
+  const exactCallsignMatches = aircraft
+    .filter((item) => identifierSet.has(cleanAdsbCallsign(item)))
+    .map((item) => aircraftPositionFromAdsbItem(item, item._triptrackerAdsbSource, origin, destination))
+    .filter((position) => position?.tailNumber);
+  if (exactCallsignMatches.length > 0) {
+    return exactCallsignMatches.sort((a, b) => Number(a.seenPositionSeconds ?? 999) - Number(b.seenPositionSeconds ?? 999))[0];
+  }
+
+  const airline = normalizeAirlineCode(String(airlineCode ?? ""));
+  if (airline !== "WN") return null;
+
+  const southwestSurfaceMatches = aircraft
+    .filter((item) => isLikelySouthwestRegistration(item.r))
+    .map((item) => aircraftPositionFromAdsbItem(item, item._triptrackerAdsbSource, origin, destination))
+    .filter((position) => position?.tailNumber && position.altitudeFt <= 1000 && haversineMiles(position.lat, position.lon, origin.lat, origin.lon) <= 5);
+  const uniqueTailNumbers = new Set(southwestSurfaceMatches.map((position) => position.tailNumber));
+  return uniqueTailNumbers.size === 1 ? southwestSurfaceMatches[0] : null;
+}
+
+function isLikelySouthwestRegistration(value) {
+  const tailNumber = usefulOptionalValue(value);
+  return Boolean(tailNumber && /^N[A-Z0-9]+WN$/i.test(tailNumber));
 }
 
 async function fetchFlightAwarePublicFlight(url) {
