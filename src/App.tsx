@@ -11,6 +11,7 @@ const storageKey = "triptracker:flights";
 const refreshIntervalMs = 30000;
 const landedDisplayMs = 10 * 60 * 1000;
 const rainViewerApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
+const appVersion = import.meta.env.VITE_APP_VERSION;
 
 type SoundEventType = "takeoff" | "landing" | "gate";
 type AudioWindow = Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext };
@@ -599,6 +600,7 @@ export function App() {
           <div>
             <p className="eyebrow">Live flight intelligence</p>
             <h1>TripTracker</h1>
+            <span className="app-version">TripTracker v{appVersion}</span>
           </div>
         </div>
         <div className="freshness">

@@ -138,6 +138,22 @@ h1 {
   margin-bottom: 0;
 }
 
+.app-version {
+  border: 1px solid rgba(79, 209, 197, 0.28);
+  border-radius: 999px;
+  color: var(--teal-deep);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-top: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 6px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .freshness {
   align-items: center;
   background: var(--panel-soft);
