@@ -298,6 +298,27 @@ function mergeTrackedFlightLists(localFlights: FlightLeg[], serverFlights: Fligh
   ));
 }
 
+function flightIdentityKey(flight: FlightLeg): string {
+  return [
+    flight.flightNumber.replace(/\s+/g, "").toUpperCase(),
+    flight.date,
+    flight.origin.code,
+    flight.destination.code,
+  ].join("::");
+}
+
+function nextActiveId(currentActiveId: string | null, currentFlights: FlightLeg[], nextFlights: FlightLeg[], concludedIds = new Set<string>()): string | null {
+  if (nextFlights.length === 0) return null;
+  if (!currentActiveId || concludedIds.has(currentActiveId)) return nextFlights[0].id;
+  if (nextFlights.some((flight) => flight.id === currentActiveId)) return currentActiveId;
+
+  const currentActiveFlight = currentFlights.find((flight) => flight.id === currentActiveId);
+  if (!currentActiveFlight) return nextFlights[0].id;
+
+  const currentFlightKey = flightIdentityKey(currentActiveFlight);
+  return nextFlights.find((flight) => flightIdentityKey(flight) === currentFlightKey)?.id ?? nextFlights[0].id;
+}
+
 export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
@@ -317,7 +338,7 @@ export function App() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
 
-  const activeFlight = flights.find((flight) => flight.id === activeId) ?? flights[0];
+  const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
   const activeInboundStatus = inboundStatusLabel(activeFlight?.inboundStatus);
   const activeInboundText = activeFlight?.inboundFrom
@@ -355,11 +376,7 @@ export function App() {
         if (cancelled || serverFlights.length === 0) return;
         setFlights((current) => {
           const nextFlights = mergeTrackedFlightLists(current, serverFlights);
-          setActiveId((currentActiveId) => (
-            currentActiveId && nextFlights.some((flight) => flight.id === currentActiveId)
-              ? currentActiveId
-              : nextFlights[0]?.id ?? null
-          ));
+          setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, nextFlights));
           return nextFlights;
         });
       })
@@ -503,12 +520,8 @@ export function App() {
       const nextFlights = flights
         .map((flight) => refreshMap.get(flight.id) ?? flight)
         .filter((flight) => !concludedIds.has(flight.id));
+      setActiveId((currentActiveId) => nextActiveId(currentActiveId, flights, nextFlights, concludedIds));
       setFlights(nextFlights);
-      if (activeId && concludedIds.has(activeId)) {
-        setActiveId(nextFlights[0]?.id ?? null);
-      } else if (activeId && refreshMap.has(activeId)) {
-        setActiveId(refreshMap.get(activeId)!.id);
-      }
       setLastRefreshAt(new Date().toISOString());
     }
 
@@ -522,9 +535,7 @@ export function App() {
     if (removedFlight) void untrackFlight(removedFlight);
     setFlights((current) => {
       const next = current.filter((flight) => flight.id !== flightId);
-      if (flightId === activeFlight?.id) {
-        setActiveId(next[0]?.id ?? null);
-      }
+      setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, next, new Set([flightId])));
       return next;
     });
   }
