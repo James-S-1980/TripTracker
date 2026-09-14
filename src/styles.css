@@ -183,17 +183,18 @@ h1 {
 }
 
 .top-flight-switcher .tracked-list {
-  display: flex;
+  display: grid;
   gap: 10px;
+  grid-template-columns: 1fr;
   margin-top: 10px;
-  overscroll-behavior-x: contain;
-  overflow-x: auto;
-  padding-bottom: 2px;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+  padding-right: 2px;
   scrollbar-width: thin;
 }
 
 .top-flight-switcher .tracked-flight {
-  flex: 0 0 min(300px, 86vw);
+  width: 100%;
 }
 
 .sidebar,
