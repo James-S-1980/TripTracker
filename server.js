@@ -1192,6 +1192,7 @@ function formatFlightEmailHtml(eventType, flight, changes) {
                       <div style="color:#ffffff;font-size:30px;font-weight:800;margin-top:4px;">${escapeHtml(flight.origin.code)}</div>
                       <div style="color:#d2d9d7;font-size:14px;font-weight:700;">${escapeHtml(flight.origin.name)}</div>
                       <div style="color:#62d982;font-size:26px;font-weight:800;margin-top:12px;">${escapeHtml(formatSmsTime(flight.departureTime, flight.origin.timeZone))}</div>
+                      <div style="color:#b6c4c2;font-size:13px;font-weight:800;margin-top:4px;">Your time: ${escapeHtml(formatSmsTime(flight.departureTime, "America/New_York"))}</div>
                     </td>
                     <td width="16%" align="center" style="vertical-align:middle;">
                       <div style="height:4px;background:#3b5350;border-radius:999px;position:relative;">
@@ -1204,6 +1205,7 @@ function formatFlightEmailHtml(eventType, flight, changes) {
                       <div style="color:#ffffff;font-size:30px;font-weight:800;margin-top:4px;">${escapeHtml(flight.destination.code)}</div>
                       <div style="color:#d2d9d7;font-size:14px;font-weight:700;">${escapeHtml(flight.destination.name)}</div>
                       <div style="color:#62d982;font-size:26px;font-weight:800;margin-top:12px;">${escapeHtml(formatSmsTime(flight.arrivalTime, flight.destination.timeZone))}</div>
+                      <div style="color:#b6c4c2;font-size:13px;font-weight:800;margin-top:4px;">Your time: ${escapeHtml(formatSmsTime(flight.arrivalTime, "America/New_York"))}</div>
                     </td>
                   </tr>
                 </table>
@@ -1308,7 +1310,7 @@ function flightTimeLine(label, airport, value) {
 }
 
 function easternTimeLine(label, value, airportTimeZone) {
-  if (!value || airportTimeZone === "America/New_York") return undefined;
+  if (!value) return undefined;
   return `${label}: ${formatSmsTime(value, "America/New_York")}`;
 }
 
