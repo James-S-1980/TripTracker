@@ -350,7 +350,26 @@ function compactIdent(value) {
   return String(value ?? "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
 }
 
+function hasAirportCoordinates(airport) {
+  return Boolean(
+    airport &&
+    Number.isFinite(Number(airport.lat)) &&
+    Number.isFinite(Number(airport.lon)) &&
+    !(Number(airport.lat) === 0 && Number(airport.lon) === 0),
+  );
+}
+
+function hasPositionCoordinates(position) {
+  return Boolean(
+    position &&
+    Number.isFinite(Number(position.lat)) &&
+    Number.isFinite(Number(position.lon)) &&
+    !(Number(position.lat) === 0 && Number(position.lon) === 0),
+  );
+}
+
 function routeSearchPoints(origin, destination) {
+  if (!hasAirportCoordinates(origin) || !hasAirportCoordinates(destination)) return [];
   const distance = haversineMiles(origin.lat, origin.lon, destination.lat, destination.lon);
   if (!Number.isFinite(distance) || distance <= 0) return [];
   const segments = Math.max(1, Math.min(7, Math.ceil(distance / 420)));
@@ -453,6 +472,7 @@ function dedupeAircraft(aircraft) {
 }
 
 function bestAdsbMatch(aircraft, identifiers, flight) {
+  if (!hasAirportCoordinates(flight?.origin) || !hasAirportCoordinates(flight?.destination)) return null;
   const identifierSet = new Set(identifiers.map(compactIdent));
   let best = null;
   for (const item of aircraft) {
@@ -510,7 +530,7 @@ function aircraftPositionFromAdsbItem(item, source, origin, destination) {
     aircraftHex: item.hex ?? undefined,
     tailNumber: usefulOptionalValue(item.r),
     seenPositionSeconds: Number.isFinite(seenPositionSeconds) ? seenPositionSeconds : undefined,
-    crossTrackMiles: origin && destination ? Math.round(crossTrackMiles(origin, destination, { lat, lon })) : undefined,
+    crossTrackMiles: hasAirportCoordinates(origin) && hasAirportCoordinates(destination) ? Math.round(crossTrackMiles(origin, destination, { lat, lon })) : undefined,
   };
 }
 
@@ -541,6 +561,9 @@ function haversineMiles(latA, lonA, latB, lonB) {
 }
 
 function crossTrackMiles(origin, destination, point) {
+  if (!hasAirportCoordinates(origin) || !hasAirportCoordinates(destination) || !hasPositionCoordinates(point)) {
+    return Number.NaN;
+  }
   const startToPoint = haversineMiles(origin.lat, origin.lon, point.lat, point.lon) / earthRadiusMiles;
   const bearingStartToPoint = bearingRadians(origin.lat, origin.lon, point.lat, point.lon);
   const bearingStartToEnd = bearingRadians(origin.lat, origin.lon, destination.lat, destination.lon);
@@ -2040,6 +2063,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
 
 function estimatedPosition(origin, destination, status, departureTime, arrivalTime, altitudeFt = 0, groundSpeedMph = 0) {
   if (status !== "En Route") return undefined;
+  if (!hasAirportCoordinates(origin) || !hasAirportCoordinates(destination)) return undefined;
   const progress = progressFromTimes(status, departureTime, arrivalTime) / 100;
   const point = interpolateGreatCircle(origin, destination, progress);
   return {
@@ -2054,6 +2078,9 @@ function estimatedPosition(origin, destination, status, departureTime, arrivalTi
 
 function reconcileEstimatedArrival(flight) {
   if (flight.status !== "En Route" || flight.aircraftPosition?.source !== "Estimated from schedule") {
+    return flight;
+  }
+  if (!hasAirportCoordinates(flight.destination) || !hasPositionCoordinates(flight.aircraftPosition)) {
     return flight;
   }
 
