@@ -52,6 +52,31 @@ npm start
 
 On the local hosted Windows server, use `.\start-triptracker-local.ps1` so the process reads the saved user-level environment variables before starting.
 
+## HTTPS hosting
+
+TripTracker can serve the same app and API over HTTPS when a trusted certificate and private key are configured. Existing HTTP behavior is unchanged unless these variables are set.
+
+```powershell
+[Environment]::SetEnvironmentVariable("HTTPS_PORT", "8443", "User")
+[Environment]::SetEnvironmentVariable("TRIPTRACKER_HTTPS_CERT_PATH", "C:\certs\triptracker-fullchain.pem", "User")
+[Environment]::SetEnvironmentVariable("TRIPTRACKER_HTTPS_KEY_PATH", "C:\certs\triptracker-privkey.pem", "User")
+```
+
+Optional settings:
+
+```powershell
+[Environment]::SetEnvironmentVariable("TRIPTRACKER_HTTPS_CA_PATH", "C:\certs\triptracker-chain.pem", "User")
+[Environment]::SetEnvironmentVariable("TRIPTRACKER_FORCE_HTTPS", "true", "User")
+```
+
+Then restart the hosted server with:
+
+```powershell
+.\start-triptracker-local.ps1
+```
+
+The HTTPS URL will be `https://<host>:8443/trip/` unless `HTTPS_PORT` is set to another port. For public iPhone use, the certificate needs to be trusted by iOS, which usually means using a DNS name with a public certificate rather than a bare IP address.
+
 ## Build
 
 ```bash

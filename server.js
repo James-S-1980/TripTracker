@@ -1,5 +1,6 @@
 import express from "express";
 import fs from "node:fs";
+import https from "node:https";
 import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,11 @@ loadLocalEnvironment();
 
 const app = express();
 const port = process.env.PORT ?? 8787;
+const httpsPort = process.env.HTTPS_PORT ?? process.env.TRIPTRACKER_HTTPS_PORT ?? 8443;
+const httpsCertPath = process.env.TRIPTRACKER_HTTPS_CERT_PATH;
+const httpsKeyPath = process.env.TRIPTRACKER_HTTPS_KEY_PATH;
+const httpsCaPath = process.env.TRIPTRACKER_HTTPS_CA_PATH;
+const forceHttps = /^true$/i.test(process.env.TRIPTRACKER_FORCE_HTTPS ?? "");
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
@@ -70,11 +76,21 @@ const airlineBrands = Object.fromEntries(
 
 const airportCatalog = Object.fromEntries(generatedAirports.map((airport) => [airport.code, airport]));
 app.use(express.json({ limit: "1mb" }));
+app.set("trust proxy", true);
 app.use((request, response, next) => {
   if (request.path.endsWith(".html") || request.path === "/" || request.path === "/trip" || request.path === "/trip/") {
     response.setHeader("Cache-Control", "no-store");
   }
   next();
+});
+app.use((request, response, next) => {
+  if (!forceHttps || request.secure || request.headers["x-forwarded-proto"] === "https") {
+    next();
+    return;
+  }
+
+  const host = String(request.headers.host ?? "");
+  response.redirect(308, `https://${host}${request.originalUrl}`);
 });
 
 function addDays(date, days) {
@@ -2325,8 +2341,33 @@ app.listen(port, () => {
   console.log(`Text notifications ${smsAppPassword ? "configured" : "not configured"}`);
 });
 
+const httpsOptions = readHttpsOptions();
+if (httpsOptions) {
+  https.createServer(httpsOptions, app).listen(httpsPort, () => {
+    console.log(`TripTracker HTTPS server listening on https://127.0.0.1:${httpsPort}`);
+  });
+}
+
 setInterval(() => {
   pollServerTrackedFlights().catch((error) => {
     console.warn("TripTracker server-side tracking poll failed", error);
   });
 }, serverTrackingPollMs);
+
+function readHttpsOptions() {
+  if (!httpsCertPath && !httpsKeyPath) return null;
+  if (!httpsCertPath || !httpsKeyPath) {
+    console.warn("TripTracker HTTPS not started because both TRIPTRACKER_HTTPS_CERT_PATH and TRIPTRACKER_HTTPS_KEY_PATH are required.");
+    return null;
+  }
+  if (!fs.existsSync(httpsCertPath) || !fs.existsSync(httpsKeyPath)) {
+    console.warn("TripTracker HTTPS not started because the configured certificate or key file does not exist.");
+    return null;
+  }
+
+  return {
+    cert: fs.readFileSync(httpsCertPath),
+    key: fs.readFileSync(httpsKeyPath),
+    ca: httpsCaPath && fs.existsSync(httpsCaPath) ? fs.readFileSync(httpsCaPath) : undefined,
+  };
+}
