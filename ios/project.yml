@@ -15,6 +15,11 @@ targets:
     platform: iOS
     sources:
       - path: TripTracker
+    info:
+      path: TripTracker/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jamesschliesske.triptracker
@@ -23,4 +28,3 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser: NO
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
-        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads: NO

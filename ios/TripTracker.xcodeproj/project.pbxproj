@@ -29,6 +29,7 @@
 		85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Airlines.swift; sourceTree = "<group>"; };
 		98961261996E6358C310C84B /* airlineCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = airlineCatalog.json; sourceTree = "<group>"; };
 		C53185F1A69DE97EDA11D82B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		CB1274BB9BC008419E445D83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D53FEEA531562CFCD543904E /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		FD368C2B2CAD171583339824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -59,6 +60,7 @@
 				FD368C2B2CAD171583339824 /* Assets.xcassets */,
 				D53FEEA531562CFCD543904E /* DashboardView.swift */,
 				21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */,
+				CB1274BB9BC008419E445D83 /* Info.plist */,
 				C53185F1A69DE97EDA11D82B /* Models.swift */,
 				5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */,
 				24F99DBF802F6FA1E734727B /* Theme.swift */,
@@ -279,8 +281,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -300,8 +302,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
-				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsArbitraryLoads = NO;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser = NO;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

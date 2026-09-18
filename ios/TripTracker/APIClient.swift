@@ -1,9 +1,9 @@
 import Foundation
 
 struct APIClient {
-    // This is the existing server. A trusted TLS certificate valid for its host is
-    // required by iOS; certificate validation is intentionally left enabled.
-    static let baseURL = URL(string: "https://69.138.9.74:8443/trip/api")!
+    // Existing TripTracker HTTP server. Change this to HTTPS when the hosted
+    // service has a certificate valid for its public hostname.
+    static let baseURL = URL(string: "http://69.138.9.74:8080/trip/api")!
     private let session = URLSession.shared
     private let decoder = JSONDecoder()
 

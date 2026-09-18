@@ -2,8 +2,8 @@
 
 This is the native SwiftUI client for the existing TripTracker server. It does
 not run a second backend. Flight lookups, shared tracked flights, server
-monitoring, and untracking use the existing HTTPS TripTracker API at
-69.138.9.74:8443/trip/api.
+monitoring, and untracking use the existing HTTP TripTracker API at
+69.138.9.74:8080/trip/api.
 
 The iPhone screen follows the web app's dark teal design: tracked flights,
 route map with RainViewer radar and airport runway overlays, flight status
@@ -24,15 +24,13 @@ The project targets iOS 17 or later. project.yml is the XcodeGen source used
 to regenerate the checked-in Xcode project, but XcodeGen is not needed just to
 open or build the project.
 
-## Backend TLS
+## Backend connection
 
-iOS validates the server's HTTPS certificate. A certificate for a DNS name
-usually will not validate for the bare IP address above. If the server has a
-certificate for a DNS name, change APIClient.baseURL to that HTTPS name and
-keep the same /trip/api path. The app deliberately does not disable
-certificate validation. The server was not reachable from the development Mac
-while this client was built, so live API behavior must be verified once the
-server is available.
+Port 8080 currently serves plain HTTP. iOS App Transport Security requires
+an arbitrary-load exception for this public IP address. Traffic to the
+TripTracker API is unencrypted; a public HTTPS hostname and certificate would
+allow this exception to be removed later. Other services, including weather
+and radar, use HTTPS.
 
 ## Local build
 
