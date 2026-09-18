@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		02C644A7A809A413E9EE4957 /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C137B8D9A2D9E4396809EC0 /* NotificationsView.swift */; };
 		06462DD743513918AD469AF7 /* airlineCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 98961261996E6358C310C84B /* airlineCatalog.json */; };
 		0E49587AF567F87A6C592C3E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F99DBF802F6FA1E734727B /* Theme.swift */; };
+		2CF8A3EE58BBF273643FCF55 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F625318877E58E0CD1E563F /* NotificationService.swift */; };
 		3A7322BC5CFF4D2861C535D8 /* TripTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */; };
 		5489367F95E53728CB84C568 /* Airlines.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */; };
 		57307919F31C7599B21EDFC5 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE70EE1DC084B60881138A4 /* APIClient.swift */; };
@@ -20,17 +22,21 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		05FD035688EB672504626100 /* TripTrackerRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TripTrackerRelease.entitlements; sourceTree = "<group>"; };
 		21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightStore.swift; sourceTree = "<group>"; };
 		24F99DBF802F6FA1E734727B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		2D29FD721F14E0421066AC3C /* TripTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TripTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F625318877E58E0CD1E563F /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		4CE70EE1DC084B60881138A4 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRouteMap.swift; sourceTree = "<group>"; };
 		795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackerApp.swift; sourceTree = "<group>"; };
 		85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Airlines.swift; sourceTree = "<group>"; };
+		8C137B8D9A2D9E4396809EC0 /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
 		98961261996E6358C310C84B /* airlineCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = airlineCatalog.json; sourceTree = "<group>"; };
 		C53185F1A69DE97EDA11D82B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		CB1274BB9BC008419E445D83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D53FEEA531562CFCD543904E /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		ED16F4BC17D07705DFA4E4DE /* TripTracker.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TripTracker.entitlements; sourceTree = "<group>"; };
 		FD368C2B2CAD171583339824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -63,8 +69,12 @@
 				CB1274BB9BC008419E445D83 /* Info.plist */,
 				C53185F1A69DE97EDA11D82B /* Models.swift */,
 				5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */,
+				2F625318877E58E0CD1E563F /* NotificationService.swift */,
+				8C137B8D9A2D9E4396809EC0 /* NotificationsView.swift */,
 				24F99DBF802F6FA1E734727B /* Theme.swift */,
+				ED16F4BC17D07705DFA4E4DE /* TripTracker.entitlements */,
 				795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */,
+				05FD035688EB672504626100 /* TripTrackerRelease.entitlements */,
 			);
 			path = TripTracker;
 			sourceTree = "<group>";
@@ -143,6 +153,8 @@
 				F1B0DD4552661FF2B4F813BA /* FlightStore.swift in Sources */,
 				F1A341F07938F799A7692F7E /* Models.swift in Sources */,
 				F9ABF35429D7FCF1B99548CF /* NativeRouteMap.swift in Sources */,
+				2CF8A3EE58BBF273643FCF55 /* NotificationService.swift in Sources */,
+				02C644A7A809A413E9EE4957 /* NotificationsView.swift in Sources */,
 				0E49587AF567F87A6C592C3E /* Theme.swift in Sources */,
 				3A7322BC5CFF4D2861C535D8 /* TripTrackerApp.swift in Sources */,
 			);
@@ -280,6 +292,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TripTracker/TripTracker.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
@@ -294,6 +307,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TRIPTRACKER_PUSH_REGISTRATION_SECRET = "";
 			};
 			name = Debug;
 		};
@@ -301,6 +315,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TripTracker/TripTrackerRelease.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
@@ -315,6 +330,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				TRIPTRACKER_PUSH_REGISTRATION_SECRET = "";
 			};
 			name = Release;
 		};

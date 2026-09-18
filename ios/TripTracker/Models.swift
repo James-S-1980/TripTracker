@@ -91,6 +91,50 @@ enum LookupResult {
 
 struct TrackedFlightResponse: Decodable { let flights: [FlightLeg] }
 
+struct NotificationStatusResponse: Decodable {
+    let recentNotifications: [ServerNotificationEvent]
+}
+
+struct ServerNotificationEvent: Decodable {
+    let id: String?
+    let title: String?
+    let body: String?
+    let timestamp: String
+    let eventType: String
+    let result: String
+    let flightNumber: String?
+    let route: String?
+    let status: String?
+
+    var eventID: String {
+        id ?? [timestamp, eventType, flightNumber ?? "", route ?? ""].joined(separator: "|")
+    }
+
+    var display: FlightNotification {
+        let flight = flightNumber ?? "Flight"
+        let title: String
+        switch eventType {
+        case "tracked": title = "Now tracking \(flight)"
+        case "concluded": title = "Tracking concluded · \(flight)"
+        default: title = "\(flight) flight update"
+        }
+        let body = [route?.replacingOccurrences(of: "-", with: " → "), status]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+        return FlightNotification(id: eventID, title: self.title ?? title, body: self.body ?? body, timestamp: timestamp, flightNumber: flightNumber, isRead: false)
+    }
+}
+
+struct FlightNotification: Codable, Identifiable {
+    let id: String
+    let title: String
+    let body: String
+    let timestamp: String
+    let flightNumber: String?
+    var isRead: Bool
+}
+
 struct APIError: Decodable {
     let error: String?
     let detail: String?

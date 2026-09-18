@@ -3,7 +3,9 @@ import MapKit
 
 struct DashboardView: View {
     @EnvironmentObject private var store: FlightStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var showAdd = false
+    @State private var showNotifications = false
 
     var body: some View {
         NavigationStack {
@@ -52,11 +54,23 @@ struct DashboardView: View {
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await store.refresh() }
             .sheet(isPresented: $showAdd) { AddFlightView() }
+            .sheet(isPresented: $showNotifications) { NotificationsView() }
             .task { await store.start() }
             .task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(30))
-                    if !Task.isCancelled { await store.refresh() }
+                    if !Task.isCancelled {
+                        await store.refresh()
+                        await store.pollNotificationEvents()
+                    }
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task {
+                        await store.sync()
+                        await store.pollNotificationEvents()
+                    }
                 }
             }
         }
@@ -86,6 +100,13 @@ struct DashboardView: View {
                         .foregroundStyle(Theme.paleTeal)
                 }
                 Spacer()
+                Button { showNotifications = true } label: {
+                    Image(systemName: store.unreadNotificationCount > 0 ? "bell.badge.fill" : "bell")
+                        .font(.title3)
+                        .frame(width: 42, height: 42)
+                        .background(Theme.panelSoft, in: Circle())
+                }
+                .accessibilityLabel("Flight notifications")
                 Button { showAdd = true } label: {
                     Image(systemName: "plus")
                         .font(.title3.bold())

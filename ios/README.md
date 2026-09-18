@@ -36,3 +36,39 @@ and radar, use HTTPS.
 
 Set DEVELOPER_DIR to /Applications/Xcode.app/Contents/Developer and run
 xcodebuild with the TripTracker scheme and an iPhone simulator destination.
+
+## Flight notifications
+
+The bell in the header opens a native notification inbox. While the app is
+open, it checks the existing server notification history every 30 seconds and
+shows a local alert for newly emailed tracking, update, and conclusion events.
+The first launch establishes a baseline so old events do not all alert at once.
+
+Closed-app alerts use Apple Push Notifications (APNs). They need an Apple
+Developer Program team, a registered bundle ID with Push Notifications enabled,
+and an APNs Auth Key (.p8). A free Personal Team cannot deliver APNs pushes.
+The app has development and production push entitlements for Debug and Release.
+The simulator build can verify compilation; use a signed iPhone build to test
+actual delivery.
+
+1. In Apple Developer, enable Push Notifications on this app's bundle ID, create
+   an APNs Auth Key, and record its Team ID and Key ID. Keep the .p8 file only
+   on the server. Never add it to Git.
+2. On the server, set `TRIPTRACKER_APNS_TEAM_ID`,
+   `TRIPTRACKER_APNS_KEY_ID`, `TRIPTRACKER_APNS_KEY_PATH` (absolute path to the
+   .p8 file), and `TRIPTRACKER_APNS_BUNDLE_ID` (the signed app bundle ID).
+   Set `TRIPTRACKER_PUSH_REGISTRATION_SECRET` to a long random secret. The
+   Windows startup script reads these from User environment variables.
+3. Give the iOS build the same registration secret through the
+   `TRIPTRACKER_PUSH_REGISTRATION_SECRET` build setting. For a local command
+   line build, pass it to `xcodebuild` as a build setting. In Xcode, set that
+   user-defined target build setting locally. The value is substituted into
+   the app Info.plist; keep it out of committed project files.
+4. Deploy the updated `server.js` and `pushNotifications.js` to the existing
+   backend, sign and install the app, grant notification permission, and track
+   a flight. APNs sends alerts for the same successfully emailed events.
+
+The registration secret limits who can subscribe to personal flight alerts,
+but the current port 8080 connection is plain HTTP, so it does not protect the
+secret or device token in transit. Configure a trusted HTTPS endpoint before
+using push registration across an untrusted network.

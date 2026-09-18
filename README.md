@@ -110,3 +110,11 @@ Generated files:
 
 - `src/airlineCatalog.generated.json`
 - `src/airlineCatalog.generated.ts`
+
+## iPhone notifications
+
+The native iPhone client has a notification inbox and local alerts based on the
+same server-side events that send flight emails. The backend can also send APNs
+alerts while the app is closed. See `ios/README.md` for Apple Developer, signing,
+server key, and registration configuration. APNs remains inactive until those
+credentials are configured; email delivery is unaffected.
