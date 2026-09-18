@@ -2,6 +2,8 @@
 
 TripTracker is a React flight monitoring app for tracking upcoming and active trips. It accepts airline, flight number, and date, then presents gate, status, departure, arrival, enroute, route map, change alerts, and airport weather information.
 
+The native iPhone client is in [ios/README.md](ios/README.md). It uses the existing hosted API and leaves the web app and server in place.
+
 Flight data is served through the local API proxy so provider keys and scraping logic stay off the browser. Weather uses the public Open-Meteo forecast API by airport coordinates.
 
 ## Run locally
