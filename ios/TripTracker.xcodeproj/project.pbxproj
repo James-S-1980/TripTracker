@@ -1,0 +1,350 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		06462DD743513918AD469AF7 /* airlineCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 98961261996E6358C310C84B /* airlineCatalog.json */; };
+		0E49587AF567F87A6C592C3E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F99DBF802F6FA1E734727B /* Theme.swift */; };
+		3A7322BC5CFF4D2861C535D8 /* TripTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */; };
+		5489367F95E53728CB84C568 /* Airlines.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */; };
+		57307919F31C7599B21EDFC5 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE70EE1DC084B60881138A4 /* APIClient.swift */; };
+		ADFFD1C34A8E5C19A3C1CDC2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FD368C2B2CAD171583339824 /* Assets.xcassets */; };
+		D7E0D02582A0F2B67B5E8886 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53FEEA531562CFCD543904E /* DashboardView.swift */; };
+		F1A341F07938F799A7692F7E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53185F1A69DE97EDA11D82B /* Models.swift */; };
+		F1B0DD4552661FF2B4F813BA /* FlightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */; };
+		F9ABF35429D7FCF1B99548CF /* NativeRouteMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightStore.swift; sourceTree = "<group>"; };
+		24F99DBF802F6FA1E734727B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		2D29FD721F14E0421066AC3C /* TripTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TripTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4CE70EE1DC084B60881138A4 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRouteMap.swift; sourceTree = "<group>"; };
+		795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackerApp.swift; sourceTree = "<group>"; };
+		85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Airlines.swift; sourceTree = "<group>"; };
+		98961261996E6358C310C84B /* airlineCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = airlineCatalog.json; sourceTree = "<group>"; };
+		C53185F1A69DE97EDA11D82B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		CB1274BB9BC008419E445D83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D53FEEA531562CFCD543904E /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		FD368C2B2CAD171583339824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		50121C633F5D16AE4F907915 = {
+			isa = PBXGroup;
+			children = (
+				F55DCAC500460A886E16DB2B /* TripTracker */,
+				9D781FD5F695B98C3E828542 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9D781FD5F695B98C3E828542 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2D29FD721F14E0421066AC3C /* TripTracker.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		F55DCAC500460A886E16DB2B /* TripTracker */ = {
+			isa = PBXGroup;
+			children = (
+				98961261996E6358C310C84B /* airlineCatalog.json */,
+				85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */,
+				4CE70EE1DC084B60881138A4 /* APIClient.swift */,
+				FD368C2B2CAD171583339824 /* Assets.xcassets */,
+				D53FEEA531562CFCD543904E /* DashboardView.swift */,
+				21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */,
+				CB1274BB9BC008419E445D83 /* Info.plist */,
+				C53185F1A69DE97EDA11D82B /* Models.swift */,
+				5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */,
+				24F99DBF802F6FA1E734727B /* Theme.swift */,
+				795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */,
+			);
+			path = TripTracker;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FBF6D5A0EBF4D6DBC142AFF8 /* TripTracker */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B745AEEDD1B7AD55666F4AFA /* Build configuration list for PBXNativeTarget "TripTracker" */;
+			buildPhases = (
+				5F69C474FB7CE5F65BD36942 /* Sources */,
+				4E0648666CD7E65EB2F1D1E3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TripTracker;
+			packageProductDependencies = (
+			);
+			productName = TripTracker;
+			productReference = 2D29FD721F14E0421066AC3C /* TripTracker.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		96797F88487FAB87B9F85908 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					FBF6D5A0EBF4D6DBC142AFF8 = {
+						DevelopmentTeam = 4P8FV64835;
+					};
+				};
+			};
+			buildConfigurationList = 8DE878B19C00C9D644D53C4C /* Build configuration list for PBXProject "TripTracker" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 50121C633F5D16AE4F907915;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 9D781FD5F695B98C3E828542 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FBF6D5A0EBF4D6DBC142AFF8 /* TripTracker */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4E0648666CD7E65EB2F1D1E3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADFFD1C34A8E5C19A3C1CDC2 /* Assets.xcassets in Resources */,
+				06462DD743513918AD469AF7 /* airlineCatalog.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5F69C474FB7CE5F65BD36942 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				57307919F31C7599B21EDFC5 /* APIClient.swift in Sources */,
+				5489367F95E53728CB84C568 /* Airlines.swift in Sources */,
+				D7E0D02582A0F2B67B5E8886 /* DashboardView.swift in Sources */,
+				F1B0DD4552661FF2B4F813BA /* FlightStore.swift in Sources */,
+				F1A341F07938F799A7692F7E /* Models.swift in Sources */,
+				F9ABF35429D7FCF1B99548CF /* NativeRouteMap.swift in Sources */,
+				0E49587AF567F87A6C592C3E /* Theme.swift in Sources */,
+				3A7322BC5CFF4D2861C535D8 /* TripTrackerApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		37630385DAB2B0FE72A568FB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		96109583DBE75FB00DD18EF7 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		C1FBC2066E5037D32DC692AD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4P8FV64835;
+				INFOPLIST_FILE = TripTracker/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser = NO;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		FEF2C84CA655522EC71B5400 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4P8FV64835;
+				INFOPLIST_FILE = TripTracker/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser = NO;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8DE878B19C00C9D644D53C4C /* Build configuration list for PBXProject "TripTracker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				37630385DAB2B0FE72A568FB /* Debug */,
+				96109583DBE75FB00DD18EF7 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B745AEEDD1B7AD55666F4AFA /* Build configuration list for PBXNativeTarget "TripTracker" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C1FBC2066E5037D32DC692AD /* Debug */,
+				FEF2C84CA655522EC71B5400 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 96797F88487FAB87B9F85908 /* Project object */;
+}
