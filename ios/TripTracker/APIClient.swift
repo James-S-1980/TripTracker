@@ -1,72 +1,209 @@
 import Foundation
 
 struct APIClient {
-    // Existing TripTracker HTTP server. Change this to HTTPS when the hosted
-    // service has a certificate valid for its public hostname.
-    static let baseURL = URL(string: "http://69.138.9.74:8080/trip/api")!
+    private let baseURL = URL(string: "https://aeroapi.flightaware.com/aeroapi")!
     private let session = URLSession.shared
-    private let decoder = JSONDecoder()
 
     func lookup(airline: String, number: String, date: String, track: Bool = false, monitor: Bool = false, flightID: String? = nil) async throws -> LookupResult {
-        var query = [
-            URLQueryItem(name: "airline", value: airline.uppercased()),
-            URLQueryItem(name: "flightNumber", value: number),
-            URLQueryItem(name: "date", value: date)
-        ]
-        if track { query.append(.init(name: "track", value: "true")) }
-        if monitor { query.append(.init(name: "monitor", value: "true")) }
-        if let flightID { query.append(.init(name: "flightId", value: flightID)) }
-        let (data, status) = try await get("flights/lookup", query: query)
-        if let choices = try? decoder.decode(LookupChoices.self, from: data), choices.ambiguous {
-            return .choices(choices)
+        guard let key = FlightAwareKey.read(), !key.isEmpty else { throw FlightDataError.missingKey }
+        let code = AirlineCatalog.resolve(airline)
+        let icao = AirlineCatalog.all.first { $0.code == code && !$0.icao.isEmpty }?.icao ?? code
+        let ident = "\(icao)\(number)"
+        let flights: [[String: Any]]
+        if let flightID {
+            flights = try await requestFlights(path: "flights/\(flightID)", key: key)
+        } else {
+            var components = URLComponents()
+            components.queryItems = [
+                .init(name: "ident_type", value: "designator"),
+                .init(name: "start", value: Self.dayOffset(date, -1)),
+                .init(name: "end", value: Self.dayOffset(date, 2)),
+                .init(name: "max_pages", value: "1")
+            ]
+            flights = try await requestFlights(path: "flights/\(ident)", query: components.percentEncodedQuery, key: key)
         }
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
-        return .flight(try decoder.decode(FlightLeg.self, from: data))
+        let exactDate = flights.filter { Self.departureDay($0) == date }
+        let candidates = exactDate.isEmpty ? flights.filter { Self.matchesDate($0, date: date) } : exactDate
+        guard !candidates.isEmpty else { throw FlightDataError.notFound(ident, date) }
+        let mapped = candidates.compactMap { try? Self.mapFlight($0, date: date, airlineCode: code, number: number) }
+        guard !mapped.isEmpty else { throw FlightDataError.incomplete }
+        if track && flightID == nil && mapped.count > 1 {
+            return .choices(.init(ambiguous: true, flights: mapped, message: "\(mapped.count) matching \(code) \(number) flights were found for \(date). Select the route you want to track."))
+        }
+        var selected = mapped.first!
+        if selected.status == "En Route" {
+            let positions = (try? await requestPositions(for: selected.id, key: key)) ?? []
+            let last = positions.last
+            selected = selected.withTelemetry(position: last, track: positions)
+        }
+        if let raw = candidates.first, let inboundID = raw["inbound_fa_flight_id"] as? String,
+           let inbound = try? await requestFlights(path: "flights/\(inboundID)", key: key).first,
+           let inboundOrigin = FlightCatalogs.airport(inbound["origin"] as? [String: Any]) {
+            selected = selected.withInbound(
+                origin: inboundOrigin,
+                number: (inbound["ident_iata"] as? String) ?? (inbound["ident"] as? String),
+                status: Self.status(inbound)
+            )
+        }
+        return .flight(selected)
     }
 
-    func trackedFlights() async throws -> [FlightLeg] {
-        let (data, status) = try await get("tracked-flights")
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
-        return try decoder.decode(TrackedFlightResponse.self, from: data).flights
+    func runways(for airports: [String]) -> [String: [AirportRunway]] {
+        Dictionary(uniqueKeysWithValues: airports.map { ($0, FlightCatalogs.runways[$0] ?? []) })
     }
 
-    func register(_ flights: [FlightLeg]) async throws {
-        guard !flights.isEmpty else { return }
-        try await post("notifications/register-tracked", body: ["flights": flights])
+    private func requestFlights(path: String, query: String? = nil, key: String) async throws -> [[String: Any]] {
+        let payload = try await request(path: path, query: query, key: key)
+        if let flights = payload["flights"] as? [[String: Any]] { return flights }
+        if payload["fa_flight_id"] != nil { return [payload] }
+        return []
     }
 
-    func untrack(_ flight: FlightLeg) async throws {
-        try await post("notifications/untrack", body: ["flight": flight])
+    private func requestPositions(for id: String, key: String) async throws -> [AircraftPosition] {
+        let payload = try await request(path: "flights/\(id)/track", query: "include_estimated_positions=true", key: key)
+        let raw = (payload["positions"] ?? payload["track"]) as? [[String: Any]] ?? []
+        return raw.compactMap(Self.mapPosition)
     }
 
-    func runways(for airports: [String]) async throws -> [String: [AirportRunway]] {
-        let (data, status) = try await get("runways", query: [
-            .init(name: "airports", value: airports.joined(separator: ","))
-        ])
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
-        return try decoder.decode([String: [AirportRunway]].self, from: data)
-    }
-
-    private func get(_ path: String, query: [URLQueryItem] = []) async throws -> (Data, Int) {
-        var components = URLComponents(url: Self.baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
-        components.queryItems = query.isEmpty ? nil : query
-        let (data, response) = try await session.data(from: components.url!)
-        return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
-
-    private func post<T: Encodable>(_ path: String, body: T) async throws {
-        var request = URLRequest(url: Self.baseURL.appendingPathComponent(path))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(body)
+    private func request(path: String, query: String? = nil, key: String) async throws -> [String: Any] {
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        components.percentEncodedQuery = query
+        var request = URLRequest(url: components.url!)
+        request.setValue(key, forHTTPHeaderField: "x-apikey")
+        request.timeoutInterval = 20
         let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else {
+            if code == 401 || code == 403 { throw FlightDataError.invalidKey }
+            if code == 402 { throw FlightDataError.paymentRequired }
+            if code == 429 { throw FlightDataError.rateLimited }
+            throw FlightDataError.provider(code)
+        }
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw FlightDataError.incomplete }
+        return object
     }
 
-    private func decodeError(_ data: Data, status: Int) -> Error {
-        let message = (try? decoder.decode(APIError.self, from: data).message) ?? ""
-        return NSError(domain: "TripTracker", code: status, userInfo: [NSLocalizedDescriptionKey: message.isEmpty ? "Server returned HTTP \(status)." : message])
+    private static func dayOffset(_ date: String, _ offset: Int) -> String {
+        guard let original = ISO8601DateFormatter.tripDay.date(from: date),
+              let shifted = Calendar(identifier: .gregorian).date(byAdding: .day, value: offset, to: original) else { return date }
+        return ISO8601DateFormatter.tripDay.string(from: shifted)
+    }
+
+    private static func departureDay(_ flight: [String: Any]) -> String? {
+        ["scheduled_out", "scheduled_off", "estimated_out", "estimated_off", "actual_out", "actual_off"]
+            .compactMap { flight[$0] as? String }.first.map { String($0.prefix(10)) }
+    }
+
+    private static func matchesDate(_ flight: [String: Any], date: String) -> Bool {
+        guard let departure = departureDay(flight) else { return false }
+        return Set([dayOffset(date, -1), date, dayOffset(date, 1)]).contains(departure)
+    }
+
+    static func mapFlight(_ raw: [String: Any], date: String, airlineCode: String, number: String) throws -> FlightLeg {
+        guard let id = raw["fa_flight_id"] as? String,
+              let origin = FlightCatalogs.airport(raw["origin"] as? [String: Any]),
+              let destination = FlightCatalogs.airport(raw["destination"] as? [String: Any]),
+              let departure = ["actual_out", "estimated_out", "scheduled_out", "actual_off", "estimated_off", "scheduled_off"].compactMap({ raw[$0] as? String }).first,
+              let arrival = ["actual_in", "estimated_in", "scheduled_in", "actual_on", "estimated_on", "scheduled_on"].compactMap({ raw[$0] as? String }).first else { throw FlightDataError.incomplete }
+        let state = status(raw)
+        let brand = AirlineCatalog.all.first { $0.code == airlineCode }
+        let progress = (raw["progress_percent"] as? NSNumber)?.doubleValue ?? (state == "Arrived" ? 100 : state == "En Route" ? 50 : 0)
+        let alert = FlightAlert(id: "\(id)-status", type: "status", priority: ["Delayed", "Cancelled"].contains(state) ? "critical" : "normal", title: state, message: raw["status"] as? String ?? "FlightAware reports \(state.lowercased()) status.", timestamp: Self.now)
+        return FlightLeg(
+            id: id, airline: raw["operator"] as? String ?? brand?.name ?? airlineCode,
+            airlineCode: airlineCode, airlineLogoUrl: brand?.logoUrl,
+            flightNumber: "\(airlineCode) \(number)", date: date,
+            origin: origin, destination: destination, departureTime: departure, arrivalTime: arrival,
+            boardingGate: useful(raw["gate_origin"]), arrivalGate: useful(raw["gate_destination"]),
+            terminal: useful(raw["terminal_origin"]), arrivalTerminal: useful(raw["terminal_destination"]),
+            status: state, progress: progress,
+            altitudeFt: ((raw["filed_altitude"] as? NSNumber)?.doubleValue ?? 0) * 100,
+            groundSpeedMph: ((raw["filed_airspeed"] as? NSNumber)?.doubleValue ?? 0) * 1.15078,
+            tailNumber: optional(raw["registration"]), inboundFrom: nil, inboundFlightNumber: nil,
+            inboundStatus: nil, inboundSource: nil, aircraftPosition: nil, track: nil,
+            lastUpdated: now, dataSource: "FlightAware AeroAPI", sourceUrl: nil,
+            landedAt: state == "Arrived" ? now : nil, alerts: [alert]
+        )
+    }
+
+    private static func mapPosition(_ raw: [String: Any]) -> AircraftPosition? {
+        guard let lat = ((raw["latitude"] ?? raw["lat"]) as? NSNumber)?.doubleValue,
+              let lon = ((raw["longitude"] ?? raw["lon"]) as? NSNumber)?.doubleValue else { return nil }
+        let altitude = ((raw["altitude"] ?? raw["altitude_ft"]) as? NSNumber)?.doubleValue
+        let speed = ((raw["groundspeed"] ?? raw["groundspeed_mph"]) as? NSNumber)?.doubleValue
+        return AircraftPosition(lat: lat, lon: lon, altitudeFt: altitude.map { $0 > 1000 ? $0 : $0 * 100 },
+            groundSpeedMph: speed.map { $0 * 1.15078 }, headingDeg: ((raw["heading"] ?? raw["course"]) as? NSNumber)?.doubleValue,
+            timestamp: (raw["timestamp"] ?? raw["time"]) as? String, source: "FlightAware track", callsign: nil)
+    }
+
+    static func status(_ raw: [String: Any]) -> String {
+        if raw["cancelled"] as? Bool == true { return "Cancelled" }
+        if present(raw["actual_in"]) || present(raw["actual_on"]) { return "Arrived" }
+        if present(raw["actual_off"]) || ((raw["progress_percent"] as? NSNumber)?.doubleValue ?? 0) > 0 { return "En Route" }
+        let text = (raw["status"] as? String ?? "").lowercased()
+        if text.contains("delay") { return "Delayed" }
+        if present(raw["actual_out"]) { return "Boarding" }
+        return "Scheduled"
+    }
+
+    private static func present(_ value: Any?) -> Bool { value != nil && !(value is NSNull) }
+
+    private static func optional(_ value: Any?) -> String? {
+        guard let text = value as? String, !text.isEmpty, !["unknown", "tbd", "n/a", "null"].contains(text.lowercased()) else { return nil }
+        return text
+    }
+    private static func useful(_ value: Any?) -> String { optional(value) ?? "TBD" }
+    private static var now: String { ISO8601DateFormatter().string(from: Date()) }
+}
+
+private extension ISO8601DateFormatter {
+    static let tripDay: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+}
+
+private extension FlightLeg {
+    func withTelemetry(position: AircraftPosition?, track: [AircraftPosition]) -> FlightLeg {
+        FlightLeg(id: id, airline: airline, airlineCode: airlineCode, airlineLogoUrl: airlineLogoUrl,
+            flightNumber: flightNumber, date: date, origin: origin, destination: destination,
+            departureTime: departureTime, arrivalTime: arrivalTime, boardingGate: boardingGate,
+            arrivalGate: arrivalGate, terminal: terminal, arrivalTerminal: arrivalTerminal,
+            status: status, progress: progress, altitudeFt: position?.altitudeFt ?? altitudeFt,
+            groundSpeedMph: position?.groundSpeedMph ?? groundSpeedMph, tailNumber: tailNumber,
+            inboundFrom: inboundFrom, inboundFlightNumber: inboundFlightNumber, inboundStatus: inboundStatus,
+            inboundSource: inboundSource, aircraftPosition: position, track: track,
+            lastUpdated: lastUpdated, dataSource: dataSource, sourceUrl: sourceUrl, landedAt: landedAt, alerts: alerts)
+    }
+
+    func withInbound(origin: Airport, number: String?, status: String) -> FlightLeg {
+        FlightLeg(id: id, airline: airline, airlineCode: airlineCode, airlineLogoUrl: airlineLogoUrl,
+            flightNumber: flightNumber, date: date, origin: self.origin, destination: destination,
+            departureTime: departureTime, arrivalTime: arrivalTime, boardingGate: boardingGate,
+            arrivalGate: arrivalGate, terminal: terminal, arrivalTerminal: arrivalTerminal,
+            status: self.status, progress: progress, altitudeFt: altitudeFt,
+            groundSpeedMph: groundSpeedMph, tailNumber: tailNumber,
+            inboundFrom: origin, inboundFlightNumber: number, inboundStatus: status,
+            inboundSource: "FlightAware AeroAPI", aircraftPosition: aircraftPosition, track: track,
+            lastUpdated: lastUpdated, dataSource: dataSource, sourceUrl: sourceUrl, landedAt: landedAt, alerts: alerts)
+    }
+}
+
+enum FlightDataError: LocalizedError {
+    case missingKey, invalidKey, paymentRequired, rateLimited, incomplete
+    case notFound(String, String), provider(Int)
+    var errorDescription: String? {
+        switch self {
+        case .missingKey: "Add your FlightAware AeroAPI key in Settings to look up flights."
+        case .invalidKey: "FlightAware rejected the AeroAPI key. Check it in Settings."
+        case .paymentRequired: "FlightAware billing is required for this AeroAPI request."
+        case .rateLimited: "FlightAware's request limit was reached. Try again later."
+        case .incomplete: "FlightAware returned incomplete flight details."
+        case .notFound(let ident, let date): "No flight found for \(ident) on \(date)."
+        case .provider(let status): "FlightAware returned HTTP \(status)."
+        }
     }
 }
 
@@ -75,9 +212,7 @@ struct RadarClient {
         let url = URL(string: "https://api.rainviewer.com/public/weather-maps.json")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
-              let template = try JSONDecoder().decode(RainViewerResponse.self, from: data).latestTileURL else {
-            throw URLError(.badServerResponse)
-        }
+              let template = try JSONDecoder().decode(RainViewerResponse.self, from: data).latestTileURL else { throw URLError(.badServerResponse) }
         return template
     }
 }
@@ -93,9 +228,7 @@ struct WeatherClient {
             .init(name: "wind_speed_unit", value: "mph")
         ]
         let (data, response) = try await URLSession.shared.data(from: components.url!)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            throw URLError(.badServerResponse)
-        }
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(Weather.self, from: data).current ?? .init(temperature_2m: nil, wind_speed_10m: nil, precipitation: nil, weather_code: nil)
     }
 }
