@@ -3,7 +3,7 @@ import Foundation
 struct APIClient {
     // Existing TripTracker HTTP server. Change this to HTTPS when the hosted
     // service has a certificate valid for its public hostname.
-    static let baseURL = URL(string: "http://69.138.9.74:8080/trip/api")!
+    static let baseURL = URL(string: "http://69.138.9.74:8087/trip/api")!
     private let session = URLSession.shared
     private let decoder = JSONDecoder()
 

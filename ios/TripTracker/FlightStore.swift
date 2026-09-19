@@ -153,7 +153,7 @@ final class FlightStore: ObservableObject {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .cannotFindHost, .timedOut:
-                return "Cannot reach the TripTracker server at 69.138.9.74:8080."
+                return "Cannot reach the TripTracker server at 69.138.9.74:8087."
             case .serverCertificateUntrusted, .secureConnectionFailed:
                 return "The server certificate is not trusted by this iPhone. Configure a trusted HTTPS certificate for the TripTracker host."
             default: break
