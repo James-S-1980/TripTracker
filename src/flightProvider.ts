@@ -54,11 +54,12 @@ export async function fetchTrackedFlights(): Promise<FlightLeg[]> {
 }
 
 export async function untrackFlight(flight: FlightLeg): Promise<void> {
-  await fetch(`${apiBase()}/notifications/untrack`, {
+  const response = await fetch(`${apiBase()}/notifications/untrack`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ flight }),
-  }).catch(() => undefined);
+  });
+  if (!response.ok) throw new Error("Could not stop tracking this flight. Please try again.");
 }
 
 export async function fetchAirportRunways(airportCodes: string[]): Promise<RunwayCatalog> {

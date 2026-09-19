@@ -338,6 +338,7 @@ export function App() {
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
+  const deletedFlightKeysRef = useRef<Set<string>>(new Set());
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
@@ -376,7 +377,8 @@ export function App() {
       .then((serverFlights) => {
         if (cancelled || serverFlights.length === 0) return;
         setFlights((current) => {
-          const nextFlights = mergeTrackedFlightLists(current, serverFlights);
+          const nextFlights = mergeTrackedFlightLists(current, serverFlights)
+            .filter((flight) => !deletedFlightKeysRef.current.has(flightIdentityKey(flight)));
           setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, nextFlights));
           return nextFlights;
         });
@@ -430,6 +432,7 @@ export function App() {
         return;
       }
       const flight = landedDisplayFlight(result);
+      deletedFlightKeysRef.current.delete(flightIdentityKey(flight));
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
@@ -451,6 +454,7 @@ export function App() {
         choice.date,
         { track: true, flightId: choice.id },
       )));
+      deletedFlightKeysRef.current.delete(flightIdentityKey(flight));
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
       setFlightChoices([]);
@@ -518,11 +522,13 @@ export function App() {
     });
 
     if (refreshMap.size > 0 || concludedIds.size > 0) {
-      const nextFlights = flights
-        .map((flight) => refreshMap.get(flight.id) ?? flight)
-        .filter((flight) => !concludedIds.has(flight.id));
-      setActiveId((currentActiveId) => nextActiveId(currentActiveId, flights, nextFlights, concludedIds));
-      setFlights(nextFlights);
+      setFlights((current) => {
+        const nextFlights = current
+          .map((flight) => refreshMap.get(flight.id) ?? flight)
+          .filter((flight) => !concludedIds.has(flight.id) && !deletedFlightKeysRef.current.has(flightIdentityKey(flight)));
+        setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, nextFlights, concludedIds));
+        return nextFlights;
+      });
       setLastRefreshAt(new Date().toISOString());
     }
 
@@ -531,9 +537,16 @@ export function App() {
     }
   }
 
-  function deleteFlight(flightId: string) {
+  async function deleteFlight(flightId: string) {
     const removedFlight = flights.find((flight) => flight.id === flightId);
-    if (removedFlight) void untrackFlight(removedFlight);
+    if (!removedFlight) return;
+    try {
+      await untrackFlight(removedFlight);
+    } catch (error) {
+      setLookupError(error instanceof Error ? error.message : "Could not stop tracking this flight.");
+      return;
+    }
+    deletedFlightKeysRef.current.add(flightIdentityKey(removedFlight));
     setFlights((current) => {
       const next = current.filter((flight) => flight.id !== flightId);
       setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, next, new Set([flightId])));
@@ -634,7 +647,7 @@ export function App() {
                   className="delete-flight"
                   onClick={(event) => {
                     event.stopPropagation();
-                    deleteFlight(flight.id);
+                    void deleteFlight(flight.id);
                   }}
                   type="button"
                 >

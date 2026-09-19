@@ -21,14 +21,16 @@ const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const serverTrackingPollMs = 30000;
 const landedDisplayMs = 10 * 60 * 1000;
-const runtimeDataDir = path.join(__dirname, "data");
+const runtimeDataDir = process.env.TRIPTRACKER_DATA_DIR ?? path.join(__dirname, "data");
 const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-flights.json");
 const notificationEventsPath = path.join(runtimeDataDir, "notification-events.json");
+const untrackedFlightsPath = path.join(runtimeDataDir, "untracked-flights.json");
 const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airportCatalog.generated.json"), "utf8"));
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "runwayCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
 const serverTrackedFlights = new Map();
+const untrackedFlights = new Set();
 const notificationDeliveryKeys = new Map();
 const notificationEvents = [];
 
@@ -668,12 +670,20 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
       return;
     }
 
-    if (!smsAppPassword) {
-      response.status(503).json({ error: "Text notifications are not configured on the server." });
+    if (eventType !== "tracked" && untrackedFlights.has(trackedFlightKey(flight))) {
+      response.json({ ok: true, suppressed: true });
       return;
     }
 
-    if (eventType === "tracked" || eventType === "updated") {
+    if (!smsAppPassword) {
+      response.status(503).json({ error: "Email notifications are not configured on the server." });
+      return;
+    }
+
+    if (eventType === "tracked") {
+      resumeTrackingFlight(flight);
+      registerServerTrackedFlight(flight);
+    } else if (eventType === "updated") {
       registerServerTrackedFlight(flight);
     }
 
@@ -695,6 +705,7 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
 
 async function handleConcludedNotificationRequest(flight, changes = []) {
   const key = trackedFlightKey(flight);
+  if (untrackedFlights.has(key)) return { ok: true, suppressed: true };
   const record = serverTrackedFlights.get(key);
   const displayFlight = landedDisplayFlight(flight, record?.flight);
 
@@ -744,7 +755,19 @@ app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], (request, respons
 app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (request, response) => {
   const flight = request.body?.flight;
   const key = flight ? trackedFlightKey(flight) : String(request.body?.key ?? "");
-  const removed = Boolean(key) && serverTrackedFlights.delete(key);
+  if (!key) {
+    response.status(400).json({ error: "Flight is required to stop tracking." });
+    return;
+  }
+  untrackedFlights.add(key);
+  try {
+    saveUntrackedFlights();
+  } catch (error) {
+    untrackedFlights.delete(key);
+    response.status(500).json({ error: "Could not save the flight removal." });
+    return;
+  }
+  const removed = serverTrackedFlights.delete(key);
   if (removed) saveServerTrackedFlights();
   response.json({ ok: true, removed, serverTrackedFlights: serverTrackedFlights.size });
 });
@@ -800,6 +823,7 @@ async function sendTextMessage(message, subject, html) {
 }
 
 async function dispatchTextNotification(eventType, flight, changes = []) {
+  if (eventType !== "tracked" && untrackedFlights.has(trackedFlightKey(flight))) return false;
   const deliveryKey = notificationDeliveryKey(eventType, flight, changes);
   const now = Date.now();
   pruneNotificationDeliveryKeys(now);
@@ -847,6 +871,7 @@ function smtpDeliverySummary(info) {
 }
 
 async function registerAndNotifyTrackedFlight(flight) {
+  resumeTrackingFlight(flight);
   if (flight.status === "Arrived") {
     const landedFlight = landedDisplayFlight(flight);
     registerServerTrackedFlight(landedFlight);
@@ -862,6 +887,7 @@ function registerServerTrackedFlight(flight, options = {}) {
   const args = lookupArgsFromFlight(flight);
   if (!args) return;
   const key = trackedFlightKey(flight);
+  if (untrackedFlights.has(key)) return;
   const existingRecord = serverTrackedFlights.get(key);
   const mergedFlight = mergeKnownFlightEnrichment(existingRecord?.flight, flight);
   serverTrackedFlights.set(key, {
@@ -906,6 +932,7 @@ async function pollServerTrackedFlights() {
       }
 
       const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date, { selectedFlightId: record.flight?.id });
+      if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) continue;
       const displayFlight = landedDisplayFlight(nextFlight, record.flight);
       const mergedFlight = mergeKnownFlightEnrichment(record.flight, displayFlight);
       const changes = describeServerFlightChanges(record.flight, mergedFlight);
@@ -920,6 +947,8 @@ async function pollServerTrackedFlights() {
         await dispatchTextNotification("updated", mergedFlight, changes);
       }
 
+      if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) continue;
+
       serverTrackedFlights.set(key, {
         ...record,
         flight: compactFlightForTracking(mergedFlight),
@@ -928,6 +957,7 @@ async function pollServerTrackedFlights() {
       });
       saveServerTrackedFlights();
     } catch (error) {
+      if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) continue;
       serverTrackedFlights.set(key, {
         ...record,
         lastCheckedAt: new Date().toISOString(),
@@ -1005,10 +1035,37 @@ function loadServerTrackedFlights() {
     for (const record of records) {
       if (!record?.flight || !record?.airline || !record?.flightNumber || !record?.date) continue;
       if (record.flight.status === "Arrived") continue;
-      serverTrackedFlights.set(trackedFlightKey(record.flight), record);
+      const key = trackedFlightKey(record.flight);
+      if (!untrackedFlights.has(key)) serverTrackedFlights.set(key, record);
     }
   } catch (error) {
     console.warn("TripTracker could not restore server tracked flights", error);
+  }
+}
+
+function loadUntrackedFlights() {
+  if (!fs.existsSync(untrackedFlightsPath)) return;
+  try {
+    const keys = JSON.parse(fs.readFileSync(untrackedFlightsPath, "utf8"));
+    if (Array.isArray(keys)) keys.filter((key) => typeof key === "string").forEach((key) => untrackedFlights.add(key));
+  } catch (error) {
+    console.warn("TripTracker could not restore removed flights", error);
+  }
+}
+
+function saveUntrackedFlights() {
+  fs.mkdirSync(runtimeDataDir, { recursive: true });
+  fs.writeFileSync(untrackedFlightsPath, JSON.stringify([...untrackedFlights], null, 2));
+}
+
+function resumeTrackingFlight(flight) {
+  const key = trackedFlightKey(flight);
+  if (!untrackedFlights.delete(key)) return;
+  try {
+    saveUntrackedFlights();
+  } catch (error) {
+    untrackedFlights.add(key);
+    throw error;
   }
 }
 
@@ -1078,7 +1135,8 @@ function lookupArgsFromFlight(flight) {
 
 function trackedFlightKey(flight) {
   const args = lookupArgsFromFlight(flight);
-  return args ? `${args.airline}-${args.flightNumber}-${flight.date}` : `${flight.flightNumber}-${flight.date}`;
+  const designator = args ? `${args.airline}-${args.flightNumber}` : flight.flightNumber;
+  return `${designator}-${flight.date}-${flight.origin?.code ?? ""}-${flight.destination?.code ?? ""}`;
 }
 
 function notificationDeliveryKey(eventType, flight, changes) {
@@ -2295,6 +2353,7 @@ app.use((request, response) => {
   response.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
+loadUntrackedFlights();
 loadServerTrackedFlights();
 loadNotificationEvents();
 
