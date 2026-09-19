@@ -1,6 +1,4 @@
 import express from "express";
-import crypto from "node:crypto";
-import { createPushService } from "./pushNotifications.js";
 import fs from "node:fs";
 import https from "node:https";
 import nodemailer from "nodemailer";
@@ -41,7 +39,6 @@ const adsbPointCache = new Map();
 const serverTrackedFlights = new Map();
 const notificationDeliveryKeys = new Map();
 const notificationEvents = [];
-const pushService = createPushService({ dataDir: runtimeDataDir });
 
 function loadLocalEnvironment() {
   const envPath = path.join(__dirname, ".env.local");
@@ -790,11 +787,6 @@ app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (req
   response.json({ ok: true, removed, serverTrackedFlights: serverTrackedFlights.size });
 });
 
-app.post(["/api/notifications/devices", "/trip/api/notifications/devices"], (request, response) => {
-  const result = pushService.register(request.body ?? {}, request.get("X-TripTracker-Push-Secret"));
-  response.status(result.status).json(result);
-});
-
 app.get(["/api/notifications/status", "/trip/api/notifications/status"], (request, response) => {
   response.json({
     configured: Boolean(smsAppPassword),
@@ -812,7 +804,7 @@ app.get(["/api/notifications/status", "/trip/api/notifications/status"], (reques
       lastCheckedAt: record.lastCheckedAt,
       lastError: record.lastError,
     })),
-    recentNotifications: notificationEvents.slice(-50).map(({ detail, ...event }) => event),
+    recentNotifications: notificationEvents.slice(-12),
   });
 });
 
@@ -860,8 +852,7 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
   try {
     const info = await sendTextMessage(message, subject, html);
     notificationDeliveryKeys.set(deliveryKey, now);
-    const event = recordNotificationEvent(eventType, flight, "sent", smtpDeliverySummary(info), changes);
-    void pushService.broadcast(event);
+    recordNotificationEvent(eventType, flight, "sent", smtpDeliverySummary(info));
     return true;
   } catch (error) {
     recordNotificationEvent(eventType, flight, "failed", error instanceof Error ? error.message : "SMTP send failed.");
@@ -869,15 +860,8 @@ async function dispatchTextNotification(eventType, flight, changes = []) {
   }
 }
 
-function recordNotificationEvent(eventType, flight, result, detail, changes = []) {
-  const title = formatFlightTextSubject(eventType, flight);
-  const body = Array.isArray(changes) && changes.length > 0
-    ? changes.join("; ").slice(0, 240)
-    : `${flight?.status ?? "Flight status available"} · ${flight?.origin?.code ?? ""}-${flight?.destination?.code ?? ""}`;
-  const event = {
-    id: crypto.randomUUID(),
-    title,
-    body,
+function recordNotificationEvent(eventType, flight, result, detail) {
+  notificationEvents.push({
     timestamp: new Date().toISOString(),
     eventType,
     result,
@@ -885,11 +869,9 @@ function recordNotificationEvent(eventType, flight, result, detail, changes = []
     route: flight?.origin?.code && flight?.destination?.code ? `${flight.origin.code}-${flight.destination.code}` : undefined,
     status: flight?.status,
     detail,
-  };
-  notificationEvents.push(event);
+  });
   while (notificationEvents.length > 50) notificationEvents.shift();
   saveNotificationEvents();
-  return event;
 }
 
 function smtpDeliverySummary(info) {
@@ -2357,7 +2339,6 @@ loadNotificationEvents();
 app.listen(port, () => {
   console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
   console.log(`Text notifications ${smsAppPassword ? "configured" : "not configured"}`);
-  console.log(`APNs push ${pushService.configured() ? "configured" : "not configured"}`);
 });
 
 const httpsOptions = readHttpsOptions();

@@ -30,23 +30,6 @@ struct APIClient {
         return try decoder.decode(TrackedFlightResponse.self, from: data).flights
     }
 
-    func notificationEvents() async throws -> [ServerNotificationEvent] {
-        let (data, status) = try await get("notifications/status")
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
-        return try decoder.decode(NotificationStatusResponse.self, from: data).recentNotifications
-    }
-
-    func registerPushDevice(token: String, environment: String, secret: String) async throws {
-        var request = URLRequest(url: Self.baseURL.appendingPathComponent("notifications/devices"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(secret, forHTTPHeaderField: "X-TripTracker-Push-Secret")
-        request.httpBody = try JSONEncoder().encode(PushDevice(token: token, environment: environment))
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(status) else { throw decodeError(data, status: status) }
-    }
-
     func register(_ flights: [FlightLeg]) async throws {
         guard !flights.isEmpty else { return }
         try await post("notifications/register-tracked", body: ["flights": flights])
@@ -85,11 +68,6 @@ struct APIClient {
         let message = (try? decoder.decode(APIError.self, from: data).message) ?? ""
         return NSError(domain: "TripTracker", code: status, userInfo: [NSLocalizedDescriptionKey: message.isEmpty ? "Server returned HTTP \(status)." : message])
     }
-}
-
-private struct PushDevice: Encodable {
-    let token: String
-    let environment: String
 }
 
 struct RadarClient {

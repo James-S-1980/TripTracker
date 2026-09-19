@@ -23,7 +23,5 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>TripTrackerPushRegistrationSecret</key>
-	<string>$(TRIPTRACKER_PUSH_REGISTRATION_SECRET)</string>
 </dict>
 </plist>

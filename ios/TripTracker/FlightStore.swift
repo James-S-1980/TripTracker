@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import UserNotifications
 
 @MainActor
 final class FlightStore: ObservableObject {
@@ -11,20 +10,12 @@ final class FlightStore: ObservableObject {
     @Published var choices: [FlightLeg] = []
     @Published private(set) var weather: [String: Weather.Current] = [:]
     @Published private(set) var lastRefresh: Date?
-    @Published private(set) var notifications: [FlightNotification] = []
 
     private let api = APIClient()
     private let cacheKey = "TripTracker.iOS.flights"
-    private let notificationCacheKey = "TripTracker.iOS.notifications"
-    private let seenEventKey = "TripTracker.iOS.seenServerEvents"
-    private let eventFeedInitializedKey = "TripTracker.iOS.eventFeedInitialized"
-    private var seenEventIDs: Set<String> = []
-    private var seenEventOrder: [String] = []
-    private var isPollingNotifications = false
     private var started = false
 
     var selected: FlightLeg? { flights.first { $0.id == selectedID } ?? flights.first }
-    var unreadNotificationCount: Int { notifications.filter { !$0.isRead }.count }
 
     init() {
         if let data = UserDefaults.standard.data(forKey: cacheKey),
@@ -32,20 +23,12 @@ final class FlightStore: ObservableObject {
             flights = cached
             selectedID = cached.first?.id
         }
-        if let data = UserDefaults.standard.data(forKey: notificationCacheKey),
-           let cached = try? JSONDecoder().decode([FlightNotification].self, from: data) {
-            notifications = cached
-        }
-        seenEventOrder = UserDefaults.standard.stringArray(forKey: seenEventKey) ?? []
-        seenEventIDs = Set(seenEventOrder)
     }
 
     func start() async {
         guard !started else { return }
         started = true
         await sync()
-        await pollNotificationEvents()
-        Task { await LocalFlightAlerts.requestPermission() }
     }
 
     func sync() async {
@@ -123,53 +106,6 @@ final class FlightStore: ObservableObject {
         if !failures.isEmpty { errorMessage = failures.joined(separator: "\n") }
     }
 
-    func pollNotificationEvents() async {
-        guard !isPollingNotifications else { return }
-        isPollingNotifications = true
-        defer { isPollingNotifications = false }
-        do {
-            let events = try await api.notificationEvents()
-            let firstLoad = !UserDefaults.standard.bool(forKey: eventFeedInitializedKey)
-            let unseen = events.filter { !seenEventIDs.contains($0.eventID) }
-            seenEventOrder.append(contentsOf: unseen.map(\.eventID))
-            seenEventOrder = Array(seenEventOrder.suffix(200))
-            seenEventIDs = Set(seenEventOrder)
-            UserDefaults.standard.set(seenEventOrder, forKey: seenEventKey)
-            UserDefaults.standard.set(true, forKey: eventFeedInitializedKey)
-            guard !firstLoad else { return }
-
-            let delivered = unseen
-                .filter { $0.result == "sent" && ["tracked", "updated", "concluded"].contains($0.eventType) }
-                .sorted { $0.timestamp < $1.timestamp }
-                .map(\.display)
-            guard !delivered.isEmpty else { return }
-            notifications.insert(contentsOf: delivered.reversed(), at: 0)
-            notifications = Array(notifications.prefix(100))
-            saveNotifications()
-            if !UserDefaults.standard.bool(forKey: "TripTracker.iOS.pushRegistered") {
-                for notification in delivered {
-                    await LocalFlightAlerts.deliver(notification)
-                }
-            }
-            await updateBadge()
-        } catch {
-            // The flight UI remains usable if the notification feed is unavailable.
-        }
-    }
-
-    func markNotificationRead(_ id: String) {
-        guard let index = notifications.firstIndex(where: { $0.id == id }) else { return }
-        notifications[index].isRead = true
-        saveNotifications()
-        Task { await updateBadge() }
-    }
-
-    func markAllNotificationsRead() {
-        for index in notifications.indices { notifications[index].isRead = true }
-        saveNotifications()
-        Task { await updateBadge() }
-    }
-
     func delete(_ flight: FlightLeg) async {
         flights.removeAll { $0.id == flight.id }
         if selectedID == flight.id { selectedID = flights.first?.id }
@@ -204,16 +140,6 @@ final class FlightStore: ObservableObject {
 
     private func save() {
         if let data = try? JSONEncoder().encode(flights) { UserDefaults.standard.set(data, forKey: cacheKey) }
-    }
-
-    private func saveNotifications() {
-        if let data = try? JSONEncoder().encode(notifications) {
-            UserDefaults.standard.set(data, forKey: notificationCacheKey)
-        }
-    }
-
-    private func updateBadge() async {
-        try? await UNUserNotificationCenter.current().setBadgeCount(unreadNotificationCount)
     }
 
     private static func apiDate(_ date: Date) -> String {
