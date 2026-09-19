@@ -14,6 +14,7 @@ final class FlightStore: ObservableObject {
     private let api = APIClient()
     private let cacheKey = "TripTracker.iOS.flights"
     private var started = false
+    private var deletedFlightKeys = Set<String>()
 
     var selected: FlightLeg? { flights.first { $0.id == selectedID } ?? flights.first }
 
@@ -42,7 +43,7 @@ final class FlightStore: ObservableObject {
                     merged.append(flight)
                 }
             }
-            flights = merged
+            flights = merged.filter { !deletedFlightKeys.contains(Self.flightKey($0)) }
             if selectedID == nil { selectedID = flights.first?.id }
             save()
             lastRefresh = Date()
@@ -107,11 +108,15 @@ final class FlightStore: ObservableObject {
     }
 
     func delete(_ flight: FlightLeg) async {
+        do { try await api.untrack(flight) }
+        catch {
+            errorMessage = readableError(error)
+            return
+        }
+        deletedFlightKeys.insert(Self.flightKey(flight))
         flights.removeAll { $0.id == flight.id }
         if selectedID == flight.id { selectedID = flights.first?.id }
         save()
-        do { try await api.untrack(flight) }
-        catch { errorMessage = readableError(error) }
     }
 
     func select(_ id: String) async {
@@ -120,6 +125,7 @@ final class FlightStore: ObservableObject {
     }
 
     private func accept(_ flight: FlightLeg, reorder: Bool = true) {
+        deletedFlightKeys.remove(Self.flightKey(flight))
         flights.removeAll { $0.id == flight.id }
         if reorder { flights.insert(flight, at: 0) }
         else { flights.append(flight) }
@@ -147,6 +153,10 @@ final class FlightStore: ObservableObject {
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = .current
         return formatter.string(from: date)
+    }
+
+    private static func flightKey(_ flight: FlightLeg) -> String {
+        "\(flight.flightNumber)|\(flight.date)|\(flight.origin.code)|\(flight.destination.code)"
     }
 
     private func readableError(_ error: Error) -> String {
