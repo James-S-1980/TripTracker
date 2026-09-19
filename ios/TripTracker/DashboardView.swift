@@ -4,23 +4,12 @@ import MapKit
 struct DashboardView: View {
     @EnvironmentObject private var store: FlightStore
     @State private var showAdd = false
-    @State private var showSettings = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     header
-                    if !store.hasFlightAwareKey {
-                        Button { showSettings = true } label: {
-                            Label("Add a FlightAware API key in Settings to enable live flight lookup.", systemImage: "key")
-                                .font(.caption.bold())
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Theme.paleTeal)
-                        .panel(padding: 12)
-                    }
                     if let error = store.errorMessage, !showAdd {
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
@@ -63,7 +52,6 @@ struct DashboardView: View {
             .toolbar(.hidden, for: .navigationBar)
             .refreshable { await store.refresh() }
             .sheet(isPresented: $showAdd) { AddFlightView() }
-            .sheet(isPresented: $showSettings) { FlightSettingsView() }
             .task { await store.start() }
             .task {
                 while !Task.isCancelled {
@@ -110,7 +98,7 @@ struct DashboardView: View {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundStyle(Theme.teal)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Auto-refresh every 30 seconds while open")
+                    Text("Auto-refresh every 30 seconds")
                         .font(.caption.bold())
                         .foregroundStyle(Theme.paleTeal)
                     Text("Last refresh: \(store.lastRefresh?.formatted(date: .omitted, time: .shortened) ?? "Pending")")
@@ -118,13 +106,6 @@ struct DashboardView: View {
                         .foregroundStyle(Theme.muted)
                 }
                 Spacer()
-                Button { showSettings = true } label: {
-                    Image(systemName: "gearshape")
-                        .font(.title3)
-                        .frame(width: 42, height: 42)
-                        .background(Theme.panel, in: Circle())
-                }
-                .accessibilityLabel("Flight data settings")
                 if store.isBusy { ProgressView().tint(Theme.teal) }
             }
             .padding(12)
@@ -405,8 +386,8 @@ private struct RouteMap: View {
             .frame(height: 285)
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .task(id: flight.id) {
-                runways = APIClient().runways(for: [flight.origin.code, flight.destination.code])
-                    .values.flatMap { $0 }
+                runways = (try? await APIClient().runways(for: [flight.origin.code, flight.destination.code]))?
+                    .values.flatMap { $0 } ?? []
             }
             .task {
                 while !Task.isCancelled {
@@ -416,7 +397,7 @@ private struct RouteMap: View {
                     } catch {
                         radarUnavailable = true
                     }
-                    try? await Task.sleep(for: .seconds(30))
+                    try? await Task.sleep(for: .seconds(300))
                 }
             }
             VStack(alignment: .leading, spacing: 4) {

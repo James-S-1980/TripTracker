@@ -17,6 +17,9 @@ targets:
       - path: TripTracker
     info:
       path: TripTracker/Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jamesschliesske.triptracker
@@ -25,14 +28,3 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsDocumentBrowser: NO
         INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
-
-  TripTrackerTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: TripTrackerTests
-    dependencies:
-      - target: TripTracker
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.jamesschliesske.triptracker.tests

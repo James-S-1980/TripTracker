@@ -10,7 +10,6 @@ final class FlightStore: ObservableObject {
     @Published var choices: [FlightLeg] = []
     @Published private(set) var weather: [String: Weather.Current] = [:]
     @Published private(set) var lastRefresh: Date?
-    @Published private(set) var hasFlightAwareKey = FlightAwareKey.read() != nil
 
     private let api = APIClient()
     private let cacheKey = "TripTracker.iOS.flights"
@@ -33,15 +32,25 @@ final class FlightStore: ObservableObject {
     }
 
     func sync() async {
-        hasFlightAwareKey = FlightAwareKey.read() != nil
-        await loadWeatherForSelected()
-        if hasFlightAwareKey && !flights.isEmpty { await refresh() }
-    }
-
-    func keyChanged() {
-        hasFlightAwareKey = FlightAwareKey.read() != nil
-        errorMessage = nil
-        if hasFlightAwareKey { Task { await refresh() } }
+        do {
+            let serverFlights = try await api.trackedFlights()
+            var merged = flights
+            for flight in serverFlights {
+                if let index = merged.firstIndex(where: { $0.id == flight.id }) {
+                    merged[index] = flight
+                } else {
+                    merged.append(flight)
+                }
+            }
+            flights = merged
+            if selectedID == nil { selectedID = flights.first?.id }
+            save()
+            lastRefresh = Date()
+            if !flights.isEmpty { try? await api.register(flights) }
+            await loadWeatherForSelected()
+        } catch {
+            errorMessage = readableError(error)
+        }
     }
 
     func add(airline: String, number: String, date: Date) async {
@@ -79,12 +88,12 @@ final class FlightStore: ObservableObject {
     }
 
     func refresh() async {
-        guard !flights.isEmpty, hasFlightAwareKey, !isBusy else { return }
+        guard !flights.isEmpty else { return }
         isBusy = true
         errorMessage = nil
         defer { isBusy = false }
         var failures: [String] = []
-        for old in flights where Self.shouldRefresh(old) {
+        for old in flights {
             do {
                 let result = try await api.lookup(airline: old.airlineCode, number: old.numberOnly, date: old.date, monitor: true, flightID: old.id)
                 if case .flight(let updated) = result {
@@ -101,6 +110,8 @@ final class FlightStore: ObservableObject {
         flights.removeAll { $0.id == flight.id }
         if selectedID == flight.id { selectedID = flights.first?.id }
         save()
+        do { try await api.untrack(flight) }
+        catch { errorMessage = readableError(error) }
     }
 
     func select(_ id: String) async {
@@ -131,15 +142,6 @@ final class FlightStore: ObservableObject {
         if let data = try? JSONEncoder().encode(flights) { UserDefaults.standard.set(data, forKey: cacheKey) }
     }
 
-    private static func shouldRefresh(_ flight: FlightLeg) -> Bool {
-        if flight.isConcluded { return false }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = .current
-        guard let day = formatter.date(from: flight.date) else { return false }
-        return day >= Calendar.current.date(byAdding: .day, value: -2, to: Date())!
-    }
-
     private static func apiDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -151,9 +153,9 @@ final class FlightStore: ObservableObject {
         if let urlError = error as? URLError {
             switch urlError.code {
             case .cannotConnectToHost, .cannotFindHost, .timedOut:
-                return "Cannot reach FlightAware. Check your internet connection."
+                return "Cannot reach the TripTracker server at 69.138.9.74:8080."
             case .serverCertificateUntrusted, .secureConnectionFailed:
-                return "Could not establish a secure connection to the flight data provider."
+                return "The server certificate is not trusted by this iPhone. Configure a trusted HTTPS certificate for the TripTracker host."
             default: break
             }
         }

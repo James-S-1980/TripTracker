@@ -7,53 +7,30 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		03A960AD79C31ED4724A2EC2 /* FlightAwareKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = 548C92B0EFE76DA2E8059321 /* FlightAwareKey.swift */; };
-		05A4F88C9DD0D02ED160C253 /* airportCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 03753785929D178BF2D1456B /* airportCatalog.json */; };
 		06462DD743513918AD469AF7 /* airlineCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 98961261996E6358C310C84B /* airlineCatalog.json */; };
 		0E49587AF567F87A6C592C3E /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24F99DBF802F6FA1E734727B /* Theme.swift */; };
 		3A7322BC5CFF4D2861C535D8 /* TripTrackerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */; };
 		5489367F95E53728CB84C568 /* Airlines.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */; };
 		57307919F31C7599B21EDFC5 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CE70EE1DC084B60881138A4 /* APIClient.swift */; };
-		6BF344597515A0D63DDD134E /* runwayCatalog.json in Resources */ = {isa = PBXBuildFile; fileRef = 9E1A3F3FD25C105334AD92A5 /* runwayCatalog.json */; };
-		7882F77C492A583B3BA45FEE /* FlightCatalogs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70F384F5429C2580EED1CF69 /* FlightCatalogs.swift */; };
-		892293DEFD8A7700ED77BD60 /* FlightDataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5F4EF33C392A28587C729F4 /* FlightDataTests.swift */; };
 		ADFFD1C34A8E5C19A3C1CDC2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FD368C2B2CAD171583339824 /* Assets.xcassets */; };
-		B75E2A4C6E40962AAAF71919 /* FlightSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B6F9CDABE5BF43C4BF79492 /* FlightSettingsView.swift */; };
 		D7E0D02582A0F2B67B5E8886 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D53FEEA531562CFCD543904E /* DashboardView.swift */; };
 		F1A341F07938F799A7692F7E /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53185F1A69DE97EDA11D82B /* Models.swift */; };
 		F1B0DD4552661FF2B4F813BA /* FlightStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */; };
 		F9ABF35429D7FCF1B99548CF /* NativeRouteMap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		EB500CD3CAE2ADBC45781507 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 96797F88487FAB87B9F85908 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = FBF6D5A0EBF4D6DBC142AFF8;
-			remoteInfo = TripTracker;
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		03753785929D178BF2D1456B /* airportCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = airportCatalog.json; sourceTree = "<group>"; };
-		1B6F9CDABE5BF43C4BF79492 /* FlightSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightSettingsView.swift; sourceTree = "<group>"; };
 		21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightStore.swift; sourceTree = "<group>"; };
 		24F99DBF802F6FA1E734727B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		2D29FD721F14E0421066AC3C /* TripTracker.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TripTracker.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4CE70EE1DC084B60881138A4 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeRouteMap.swift; sourceTree = "<group>"; };
-		548C92B0EFE76DA2E8059321 /* FlightAwareKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightAwareKey.swift; sourceTree = "<group>"; };
-		70F384F5429C2580EED1CF69 /* FlightCatalogs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightCatalogs.swift; sourceTree = "<group>"; };
-		78E46C32300A2A827893663D /* TripTrackerTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = TripTrackerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripTrackerApp.swift; sourceTree = "<group>"; };
 		85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Airlines.swift; sourceTree = "<group>"; };
 		98961261996E6358C310C84B /* airlineCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = airlineCatalog.json; sourceTree = "<group>"; };
-		9E1A3F3FD25C105334AD92A5 /* runwayCatalog.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = runwayCatalog.json; sourceTree = "<group>"; };
 		C53185F1A69DE97EDA11D82B /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		CB1274BB9BC008419E445D83 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		D53FEEA531562CFCD543904E /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
-		D5F4EF33C392A28587C729F4 /* FlightDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlightDataTests.swift; sourceTree = "<group>"; };
 		FD368C2B2CAD171583339824 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -62,24 +39,14 @@
 			isa = PBXGroup;
 			children = (
 				F55DCAC500460A886E16DB2B /* TripTracker */,
-				60135D99AE503493B715D7C1 /* TripTrackerTests */,
 				9D781FD5F695B98C3E828542 /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		60135D99AE503493B715D7C1 /* TripTrackerTests */ = {
-			isa = PBXGroup;
-			children = (
-				D5F4EF33C392A28587C729F4 /* FlightDataTests.swift */,
-			);
-			path = TripTrackerTests;
 			sourceTree = "<group>";
 		};
 		9D781FD5F695B98C3E828542 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				2D29FD721F14E0421066AC3C /* TripTracker.app */,
-				78E46C32300A2A827893663D /* TripTrackerTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -89,18 +56,13 @@
 			children = (
 				98961261996E6358C310C84B /* airlineCatalog.json */,
 				85630E5684BBC6D4EDE1C5E8 /* Airlines.swift */,
-				03753785929D178BF2D1456B /* airportCatalog.json */,
 				4CE70EE1DC084B60881138A4 /* APIClient.swift */,
 				FD368C2B2CAD171583339824 /* Assets.xcassets */,
 				D53FEEA531562CFCD543904E /* DashboardView.swift */,
-				548C92B0EFE76DA2E8059321 /* FlightAwareKey.swift */,
-				70F384F5429C2580EED1CF69 /* FlightCatalogs.swift */,
-				1B6F9CDABE5BF43C4BF79492 /* FlightSettingsView.swift */,
 				21A6F8FD8C333C7FDF4B73BE /* FlightStore.swift */,
 				CB1274BB9BC008419E445D83 /* Info.plist */,
 				C53185F1A69DE97EDA11D82B /* Models.swift */,
 				5333025A8123BD6BD214DC6E /* NativeRouteMap.swift */,
-				9E1A3F3FD25C105334AD92A5 /* runwayCatalog.json */,
 				24F99DBF802F6FA1E734727B /* Theme.swift */,
 				795EB9E48ADC4CC798784A5D /* TripTrackerApp.swift */,
 			);
@@ -110,24 +72,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		EC016534D4D05D2AEF285D8D /* TripTrackerTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = D100BFCEA59206CA01AAB1FA /* Build configuration list for PBXNativeTarget "TripTrackerTests" */;
-			buildPhases = (
-				7419F4B4A53966FF30E75F2C /* Sources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				34D4E371923D707D5EAF5EC5 /* PBXTargetDependency */,
-			);
-			name = TripTrackerTests;
-			packageProductDependencies = (
-			);
-			productName = TripTrackerTests;
-			productReference = 78E46C32300A2A827893663D /* TripTrackerTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 		FBF6D5A0EBF4D6DBC142AFF8 /* TripTracker */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B745AEEDD1B7AD55666F4AFA /* Build configuration list for PBXNativeTarget "TripTracker" */;
@@ -172,7 +116,6 @@
 			projectRoot = "";
 			targets = (
 				FBF6D5A0EBF4D6DBC142AFF8 /* TripTracker */,
-				EC016534D4D05D2AEF285D8D /* TripTrackerTests */,
 			);
 		};
 /* End PBXProject section */
@@ -184,8 +127,6 @@
 			files = (
 				ADFFD1C34A8E5C19A3C1CDC2 /* Assets.xcassets in Resources */,
 				06462DD743513918AD469AF7 /* airlineCatalog.json in Resources */,
-				05A4F88C9DD0D02ED160C253 /* airportCatalog.json in Resources */,
-				6BF344597515A0D63DDD134E /* runwayCatalog.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,9 +140,6 @@
 				57307919F31C7599B21EDFC5 /* APIClient.swift in Sources */,
 				5489367F95E53728CB84C568 /* Airlines.swift in Sources */,
 				D7E0D02582A0F2B67B5E8886 /* DashboardView.swift in Sources */,
-				03A960AD79C31ED4724A2EC2 /* FlightAwareKey.swift in Sources */,
-				7882F77C492A583B3BA45FEE /* FlightCatalogs.swift in Sources */,
-				B75E2A4C6E40962AAAF71919 /* FlightSettingsView.swift in Sources */,
 				F1B0DD4552661FF2B4F813BA /* FlightStore.swift in Sources */,
 				F1A341F07938F799A7692F7E /* Models.swift in Sources */,
 				F9ABF35429D7FCF1B99548CF /* NativeRouteMap.swift in Sources */,
@@ -210,23 +148,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		7419F4B4A53966FF30E75F2C /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				892293DEFD8A7700ED77BD60 /* FlightDataTests.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		34D4E371923D707D5EAF5EC5 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = FBF6D5A0EBF4D6DBC142AFF8 /* TripTracker */;
-			targetProxy = EB500CD3CAE2ADBC45781507 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		37630385DAB2B0FE72A568FB /* Debug */ = {
@@ -294,38 +216,6 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
-		};
-		4294044124D550B8E5FFB097 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TripTracker.app/TripTracker";
-			};
-			name = Debug;
-		};
-		4692200D9EA5E8D3E6C114B9 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.jamesschliesske.triptracker.tests;
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TripTracker.app/TripTracker";
-			};
-			name = Release;
 		};
 		96109583DBE75FB00DD18EF7 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -445,15 +335,6 @@
 			buildConfigurations = (
 				C1FBC2066E5037D32DC692AD /* Debug */,
 				FEF2C84CA655522EC71B5400 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Debug;
-		};
-		D100BFCEA59206CA01AAB1FA /* Build configuration list for PBXNativeTarget "TripTrackerTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				4294044124D550B8E5FFB097 /* Debug */,
-				4692200D9EA5E8D3E6C114B9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
