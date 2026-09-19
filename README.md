@@ -4,6 +4,8 @@ TripTracker is a React flight monitoring app for tracking upcoming and active tr
 
 The native iPhone client is in [ios/README.md](ios/README.md). It uses the hosted TripTracker API on port 8087.
 
+The native Apple Watch client is in [watchos/README.md](watchos/README.md). It reads the same tracked flights from the hosted API.
+
 Flight data is served through the API in the TripTracker container so provider keys and scraping logic stay off the browser. Weather uses the public Open-Meteo forecast API by airport coordinates.
 
 ## Container hosting

@@ -1,0 +1,28 @@
+name: TripTrackerWatch
+options:
+  bundleIdPrefix: com.jamesschliesske
+  deploymentTarget:
+    watchOS: "10.0"
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    GENERATE_INFOPLIST_FILE: YES
+targets:
+  TripTrackerWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - path: TripTrackerWatch
+    info:
+      path: TripTrackerWatch/Info.plist
+      properties:
+        CFBundleDisplayName: TripTracker
+        WKWatchOnly: true
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jamesschliesske.triptracker.watch
+        DEVELOPMENT_TEAM: 4P8FV64835
+        TARGETED_DEVICE_FAMILY: "4"
+        INFOPLIST_KEY_WKWatchOnly: YES
