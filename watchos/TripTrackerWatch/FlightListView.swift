@@ -85,7 +85,17 @@ private struct FlightRow: View {
                 Image(systemName: "chevron.right").font(.caption2).foregroundStyle(WatchStyle.muted)
             }
             Text(flight.route).font(.caption).foregroundStyle(WatchStyle.teal)
-            Text(flight.status).font(.caption2.bold()).foregroundStyle(flight.status == "Delayed" || flight.status == "Cancelled" ? .orange : WatchStyle.muted)
+            HStack {
+                Text(flight.status)
+                    .font(.caption2.bold())
+                    .foregroundStyle(flight.status == "Delayed" || flight.status == "Cancelled" ? .orange : WatchStyle.muted)
+                Spacer(minLength: 2)
+                Text("\(flight.completionPercent)%")
+                    .font(.caption2.bold())
+                    .foregroundStyle(WatchStyle.teal)
+            }
+            ProgressView(value: Double(flight.completionPercent), total: 100)
+                .tint(WatchStyle.teal)
             HStack {
                 Text("DEP \(flight.departureLabel())")
                 Spacer(minLength: 2)
@@ -93,6 +103,14 @@ private struct FlightRow: View {
             }
             .font(.system(size: 11, weight: .medium))
             .foregroundStyle(.white)
+            Text("Gates \(flight.departureGateLabel) → \(flight.arrivalGateLabel)")
+                .font(.system(size: 10))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(WatchStyle.muted)
+            Text("Flight updated \(flight.updatedTimeLabel)")
+                .font(.system(size: 10))
+                .foregroundStyle(WatchStyle.muted)
         }
         .padding(9)
         .background(WatchStyle.card, in: RoundedRectangle(cornerRadius: 10))
@@ -112,18 +130,29 @@ private struct FlightDetailView: View {
                     .foregroundStyle(WatchStyle.teal)
                 Label(flight.status, systemImage: "airplane")
                     .font(.subheadline.bold())
-                timeBlock("Departure", airport: flight.origin.code, time: flight.departureLabel())
-                timeBlock("Arrival", airport: flight.destination.code, time: flight.arrivalLabel())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(flight.completionPercent)% complete")
+                        .font(.caption.bold())
+                        .foregroundStyle(WatchStyle.teal)
+                    ProgressView(value: Double(flight.completionPercent), total: 100)
+                        .tint(WatchStyle.teal)
+                }
+                timeBlock("Departure", airport: flight.origin.code, time: flight.departureLabel(), gate: flight.departureGateLabel)
+                timeBlock("Arrival", airport: flight.destination.code, time: flight.arrivalLabel(), gate: flight.arrivalGateLabel)
+                Text("Flight updated \(flight.updatedDateTimeLabel)")
+                    .font(.caption2)
+                    .foregroundStyle(WatchStyle.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
         }
     }
 
-    private func timeBlock(_ title: String, airport: String, time: String) -> some View {
+    private func timeBlock(_ title: String, airport: String, time: String, gate: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("\(title) · \(airport)").font(.caption2).foregroundStyle(WatchStyle.muted)
             Text(time).font(.title3.bold()).foregroundStyle(.white)
+            Text("Gate \(gate)").font(.caption.bold()).foregroundStyle(WatchStyle.teal)
             Text("Local airport time").font(.system(size: 10)).foregroundStyle(WatchStyle.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

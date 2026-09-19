@@ -2,7 +2,8 @@
 
 This native watchOS app displays the flights tracked by the existing TripTracker
 server at `http://69.138.9.74:8087/trip/api/tracked-flights`. It shows flight
-number, route, status, and departure and arrival times in each airport's local
+number, route, status, departure and arrival gates, completion percentage,
+last flight update time, and departure and arrival times in each airport's local
 time zone. The list refreshes every 30 seconds while the watch app is open, and
 a Refresh button is available. The last successful list is cached on the watch
 for times when the server is unreachable.
