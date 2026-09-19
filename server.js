@@ -1,21 +1,13 @@
 import express from "express";
 import fs from "node:fs";
-import https from "node:https";
 import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-loadLocalEnvironment();
-
 const app = express();
-const port = process.env.PORT ?? 8787;
-const httpsPort = process.env.HTTPS_PORT ?? process.env.TRIPTRACKER_HTTPS_PORT ?? 8443;
-const httpsCertPath = process.env.TRIPTRACKER_HTTPS_CERT_PATH;
-const httpsKeyPath = process.env.TRIPTRACKER_HTTPS_KEY_PATH;
-const httpsCaPath = process.env.TRIPTRACKER_HTTPS_CA_PATH;
-const forceHttps = /^true$/i.test(process.env.TRIPTRACKER_FORCE_HTTPS ?? "");
+const port = process.env.PORT ?? 8772;
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
@@ -40,26 +32,6 @@ const serverTrackedFlights = new Map();
 const notificationDeliveryKeys = new Map();
 const notificationEvents = [];
 
-function loadLocalEnvironment() {
-  const envPath = path.join(__dirname, ".env.local");
-  if (!fs.existsSync(envPath)) return;
-
-  const lines = fs.readFileSync(envPath, "utf8").split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex <= 0) continue;
-
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const rawValue = trimmed.slice(separatorIndex + 1).trim();
-    const value = rawValue.replace(/^['"]|['"]$/g, "");
-    if (!process.env[key] || key.startsWith("TRIPTRACKER_")) {
-      process.env[key] = value;
-    }
-  }
-}
-
 const airlineIcaoByIata = Object.fromEntries(
   generatedAirlines
     .filter((airline) => airline.code && airline.icao)
@@ -83,16 +55,6 @@ app.use((request, response, next) => {
   }
   next();
 });
-app.use((request, response, next) => {
-  if (!forceHttps || request.secure || request.headers["x-forwarded-proto"] === "https") {
-    next();
-    return;
-  }
-
-  const host = String(request.headers.host ?? "");
-  response.redirect(308, `https://${host}${request.originalUrl}`);
-});
-
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);
@@ -2337,37 +2299,12 @@ loadServerTrackedFlights();
 loadNotificationEvents();
 
 app.listen(port, () => {
-  console.log(`TripTracker server listening on http://127.0.0.1:${port}`);
-  console.log(`Text notifications ${smsAppPassword ? "configured" : "not configured"}`);
+  console.log(`TripTracker server listening on port ${port}`);
+  console.log(`Email notifications ${smsAppPassword ? "configured" : "not configured"}`);
 });
-
-const httpsOptions = readHttpsOptions();
-if (httpsOptions) {
-  https.createServer(httpsOptions, app).listen(httpsPort, () => {
-    console.log(`TripTracker HTTPS server listening on https://127.0.0.1:${httpsPort}`);
-  });
-}
 
 setInterval(() => {
   pollServerTrackedFlights().catch((error) => {
     console.warn("TripTracker server-side tracking poll failed", error);
   });
 }, serverTrackingPollMs);
-
-function readHttpsOptions() {
-  if (!httpsCertPath && !httpsKeyPath) return null;
-  if (!httpsCertPath || !httpsKeyPath) {
-    console.warn("TripTracker HTTPS not started because both TRIPTRACKER_HTTPS_CERT_PATH and TRIPTRACKER_HTTPS_KEY_PATH are required.");
-    return null;
-  }
-  if (!fs.existsSync(httpsCertPath) || !fs.existsSync(httpsKeyPath)) {
-    console.warn("TripTracker HTTPS not started because the configured certificate or key file does not exist.");
-    return null;
-  }
-
-  return {
-    cert: fs.readFileSync(httpsCertPath),
-    key: fs.readFileSync(httpsKeyPath),
-    ca: httpsCaPath && fs.existsSync(httpsCaPath) ? fs.readFileSync(httpsCaPath) : undefined,
-  };
-}

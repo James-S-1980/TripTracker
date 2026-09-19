@@ -1,0 +1,15 @@
+services:
+  triptracker:
+    build: .
+    image: triptracker:0.1.3
+    container_name: triptracker
+    restart: unless-stopped
+    ports:
+      - "8772:8772"
+    environment:
+      PORT: "8772"
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - ./data:/app/data

@@ -15,7 +15,7 @@ export async function lookupFlight(airlineInput: string, flightNumber: string, d
   try {
     response = await fetch(`${apiBase()}/flights/lookup?${params.toString()}`);
   } catch {
-    throw new Error("Flight lookup API is unavailable. Start the TripTracker server and try again.");
+    throw new Error("Flight lookup API is unavailable. Check the TripTracker service and try again.");
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
