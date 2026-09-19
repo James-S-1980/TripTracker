@@ -23,6 +23,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jamesschliesske.triptracker
+        DEVELOPMENT_TEAM: 4P8FV64835
         INFOPLIST_KEY_CFBundleDisplayName: TripTracker
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

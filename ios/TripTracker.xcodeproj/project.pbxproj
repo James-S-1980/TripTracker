@@ -99,6 +99,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					FBF6D5A0EBF4D6DBC142AFF8 = {
+						DevelopmentTeam = 4P8FV64835;
+					};
 				};
 			};
 			buildConfigurationList = 8DE878B19C00C9D644D53C4C /* Build configuration list for PBXProject "TripTracker" */;
@@ -281,6 +284,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4P8FV64835;
 				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -302,6 +306,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 4P8FV64835;
 				INFOPLIST_FILE = TripTracker/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = TripTracker;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
