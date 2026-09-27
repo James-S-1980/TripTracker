@@ -8,6 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const port = process.env.PORT ?? 8772;
+const appVersion = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version;
+const healthFailureTestPath = "/tmp/triptracker-health-failure-test";
+fs.rmSync(healthFailureTestPath, { force: true });
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
@@ -57,6 +60,46 @@ app.use((request, response, next) => {
   }
   next();
 });
+app.get(["/healthz", "/trip/healthz"], (_request, response) => {
+  const checks = {
+    webAssets: healthFileCheck(path.join(__dirname, "dist", "index.html"), fs.constants.R_OK),
+    runtimeData: healthDirectoryCheck(runtimeDataDir),
+    failureTest: healthFailureTestCheck(),
+  };
+  const healthy = Object.values(checks).every((check) => check.ok);
+  response.status(healthy ? 200 : 503).json({
+    status: healthy ? "healthy" : "unhealthy",
+    version: appVersion,
+    uptimeSeconds: Math.floor(process.uptime()),
+    checks,
+  });
+});
+
+function healthFileCheck(filePath, mode) {
+  try {
+    fs.accessSync(filePath, mode);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "File check failed." };
+  }
+}
+
+function healthFailureTestCheck() {
+  return fs.existsSync(healthFailureTestPath)
+    ? { ok: false, error: "Intentional health-failure test is active." }
+    : { ok: true };
+}
+
+function healthDirectoryCheck(directoryPath) {
+  try {
+    fs.mkdirSync(directoryPath, { recursive: true });
+    fs.accessSync(directoryPath, fs.constants.R_OK | fs.constants.W_OK);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Directory check failed." };
+  }
+}
+
 function addDays(date, days) {
   const value = new Date(`${date}T00:00:00Z`);
   value.setUTCDate(value.getUTCDate() + days);

@@ -1,7 +1,7 @@
 services:
   triptracker:
     build: .
-    image: triptracker:0.1.4
+    image: triptracker:0.1.5
     container_name: triptracker
     restart: unless-stopped
     ports:
@@ -13,3 +13,33 @@ services:
         required: false
     volumes:
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "scripts/healthcheck.mjs"]
+      interval: 30s
+      timeout: 7s
+      retries: 3
+      start_period: 20s
+
+  recovery:
+    image: docker:28-cli
+    container_name: triptracker-recovery
+    restart: unless-stopped
+    depends_on:
+      triptracker:
+        condition: service_started
+    environment:
+      TARGET_CONTAINER: triptracker
+      CHECK_INTERVAL_SECONDS: "15"
+      RESTART_COOLDOWN_SECONDS: "90"
+      MAX_RESTARTS_PER_WINDOW: "3"
+      RESTART_WINDOW_SECONDS: "900"
+    entrypoint: ["/bin/sh", "/opt/triptracker/watch-health.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker/watch-health.sh:/opt/triptracker/watch-health.sh:ro
+      - recovery-state:/state
+    network_mode: none
+    read_only: true
+
+volumes:
+  recovery-state:

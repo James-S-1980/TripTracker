@@ -80,6 +80,10 @@ test("deleted leg stays untracked across stale registrations and a restart", asy
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
+  const healthResponse = await fetch(`http://127.0.0.1:${port}/healthz`);
+  assert.equal(healthResponse.status, 200);
+  assert.equal((await healthResponse.json()).status, "healthy");
+
   await post(server.baseUrl, "/notifications/register-tracked", { flights: [first, second] });
   assert.equal((await trackedFlights(server.baseUrl)).length, 2);
 
