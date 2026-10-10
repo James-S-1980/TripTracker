@@ -133,6 +133,10 @@ FlightAware-backed lookups can include live aircraft position and track data. Tr
 
 Public web fallback pages usually expose altitude, speed, gates, and times but not exact latitude/longitude. When no FlightAware or ADS-B position is available, TripTracker labels the aircraft map marker as estimated from schedule.
 
+## Map data
+
+The route map uses OpenStreetMap's standard raster tiles, which do not require an API key. The weather radar remains a separate RainViewer overlay. OpenStreetMap attribution is displayed on the map, and the app requests tiles only as users navigate the interactive map.
+
 ## Email notifications
 
 TripTracker sends email when a flight is first tracked and when tracked flight status, gate, time, tail, or inbound details change. Set `TRIPTRACKER_SMTP_USER`, `TRIPTRACKER_SMTP_APP_PASSWORD`, and `TRIPTRACKER_SMS_TO` in `.env.local`; despite its legacy name, `TRIPTRACKER_SMS_TO` is the email recipient. Do not commit `.env.local`.
