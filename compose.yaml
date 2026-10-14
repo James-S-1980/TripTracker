@@ -1,18 +1,21 @@
 services:
   triptracker:
     build: .
-    image: triptracker:0.1.6
+    image: triptracker:0.1.7
     container_name: triptracker
     restart: unless-stopped
     ports:
       - "8772:8772"
     environment:
       PORT: "8772"
+      NODE_OPTIONS: "--max-old-space-size=128"
     env_file:
       - path: .env.local
         required: false
     volumes:
       - ./data:/app/data
+    mem_limit: 192m
+    pids_limit: 64
     healthcheck:
       test: ["CMD", "node", "scripts/healthcheck.mjs"]
       interval: 30s
@@ -40,6 +43,8 @@ services:
       - recovery-state:/state
     network_mode: none
     read_only: true
+    mem_limit: 64m
+    pids_limit: 32
 
 volumes:
   recovery-state:
