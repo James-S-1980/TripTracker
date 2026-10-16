@@ -651,8 +651,14 @@ export function App() {
             <span className="app-version">TripTracker v{appVersion}</span>
           </div>
         </div>
+        <div className="brand-route-art" aria-hidden="true">
+          <span className="brand-route-stop origin" />
+          <span className="brand-route-line" />
+          <Plane className="brand-route-plane" size={22} />
+          <span className="brand-route-stop destination" />
+        </div>
         <div className="freshness">
-          <Radar size={18} />
+          <Radar className="freshness-radar" size={18} />
           <span>
             Auto-refresh every 30 seconds
             <small>Last refresh: {formatTimestamp(lastRefreshAt)}</small>
@@ -668,12 +674,12 @@ export function App() {
           </div>
           <div className="tracked-list">
             {flights.map((flight) => (
-              <div className={`tracked-flight ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
+              <div className={`tracked-flight status-${flight.status.toLowerCase().replace(/\s+/g, "-")} ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
                 <button onClick={() => setActiveId(flight.id)} type="button">
                   <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
                   <span className="tracked-copy">
                     <strong>{flight.flightNumber}</strong>
-                    <span>{flight.origin.code} to {flight.destination.code}</span>
+                    <span className="tracked-route">{flight.origin.code}<ArrowRight size={13} />{flight.destination.code}</span>
                     <em>{flight.status}</em>
                   </span>
                 </button>
@@ -882,7 +888,15 @@ export function App() {
 
                     <div className="route-progress">
                       <span>{activeFlight.progress}%</span>
-                      <div><i style={{ width: `${activeFlight.progress}%` }} /></div>
+                      <div className="route-progress-track">
+                        <i style={{ width: `${activeFlight.progress}%` }} />
+                        <Plane
+                          aria-hidden="true"
+                          className="route-progress-plane"
+                          size={18}
+                          style={{ left: `${Math.max(2, Math.min(98, activeFlight.progress))}%` }}
+                        />
+                      </div>
                     </div>
 
                     <div className="airport-stop">
@@ -1006,8 +1020,9 @@ function TimeMetric({ icon, label, value, subValue, source }: { icon: React.Reac
 }
 
 function WeatherCard({ title, code, weather }: { title: string; code: string; weather?: WeatherSnapshot }) {
+  const tone = title.toLowerCase().startsWith("origin") ? "origin" : "destination";
   return (
-    <article className="weather-card">
+    <article className={`weather-card ${tone}`}>
       <div className="section-heading">
         <CloudSun size={18} />
         <h2>{title}</h2>
@@ -1124,6 +1139,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+        className: "triptracker-base-map",
         maxZoom: 10,
       }).addTo(leafletMapRef.current);
     }
@@ -1140,13 +1156,14 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     const aircraft = flight.aircraftPosition;
     const aircraftPoint: L.LatLngTuple | undefined = aircraft ? [aircraft.lat, aircraft.lon] : undefined;
 
-    L.polyline(routePoints, { color: "#0f766e", opacity: 0.82, weight: 4 }).addTo(map);
+    L.polyline(routePoints, { color: "#07111d", opacity: 0.88, weight: 8 }).addTo(map);
+    L.polyline(routePoints, { color: "#4ed9ff", opacity: 0.92, weight: 4 }).addTo(map);
     drawRunwayOverlay(map, flight.origin.code, runwayCatalog[flight.origin.code] ?? [], runwayApproaches, false);
     drawRunwayOverlay(map, flight.destination.code, runwayCatalog[flight.destination.code] ?? [], runwayApproaches, true);
-    L.circleMarker(originPoint, { color: "#0f766e", fillColor: "#0f766e", fillOpacity: 1, radius: 7 })
+    L.circleMarker(originPoint, { color: "#d8f8ff", fillColor: "#38c7f4", fillOpacity: 1, radius: 7, weight: 2 })
       .bindPopup(`${flight.origin.code} ${flight.origin.city}`)
       .addTo(map);
-    L.circleMarker(destinationPoint, { color: "#d97706", fillColor: "#d97706", fillOpacity: 1, radius: 7 })
+    L.circleMarker(destinationPoint, { color: "#fff0dc", fillColor: "#ff9f43", fillOpacity: 1, radius: 7, weight: 2 })
       .bindPopup(`${flight.destination.code} ${flight.destination.city}`)
       .addTo(map);
 
