@@ -614,18 +614,25 @@ function bearingRadians(latA, lonA, latB, lonB) {
 
 function flightsForRequestedDate(flights, requestedDate) {
   const target = requestedDate.slice(0, 10);
-  const matchingFlights = flights.filter((flight) => (
-    (flight.scheduled_out ?? flight.scheduled_off ?? flight.estimated_out ?? flight.estimated_off ?? "").startsWith(target)
-  ));
-  return matchingFlights.length > 0 ? matchingFlights : flights;
+  return flights.filter((flight) => {
+    const departureTime = flight.scheduled_out ?? flight.scheduled_off ?? flight.estimated_out ?? flight.estimated_off ?? flight.actual_out ?? flight.actual_off;
+    if (!departureTime) return false;
+    const origin = normalizeAirport(flight.origin);
+    const departureDate = publicFlightDateForTimeZone(
+      new Date(departureTime).getTime() / 1000,
+      origin?.timeZone ?? "UTC",
+    );
+    return departureDate === target;
+  });
 }
 
 function chooseFlight(flights, requestedDate, selectedFlightId) {
+  const matchingFlights = flightsForRequestedDate(flights, requestedDate);
   if (selectedFlightId) {
-    const selected = flights.find((flight) => flight.fa_flight_id === selectedFlightId);
+    const selected = matchingFlights.find((flight) => flight.fa_flight_id === selectedFlightId);
     if (selected) return selected;
   }
-  return flightsForRequestedDate(flights, requestedDate)[0];
+  return matchingFlights[0];
 }
 
 function ambiguousFlightLookup(flights, ident, date) {
@@ -1644,7 +1651,7 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
 
   const departureEpoch = publicTimeValue(publicFlight.takeoffTimes) ?? publicTimeValue(publicFlight.gateDepartureTimes);
   const arrivalEpoch = publicTimeValue(publicFlight.landingTimes) ?? publicTimeValue(publicFlight.gateArrivalTimes);
-  if (!departureEpoch || !arrivalEpoch || !publicFlightMatchesDateWindow(departureEpoch, arrivalEpoch, date, origin.timeZone, destination.timeZone)) return null;
+  if (!departureEpoch || !arrivalEpoch || !publicFlightMatchesDepartureDate(departureEpoch, date, origin.timeZone)) return null;
 
   const departureTime = new Date(departureEpoch * 1000).toISOString();
   const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
@@ -1794,17 +1801,8 @@ function publicTimeValue(times) {
   return null;
 }
 
-function publicFlightMatchesDateWindow(departureEpoch, arrivalEpoch, date, originTimeZone, destinationTimeZone) {
-  const dates = new Set([
-    date,
-    addDays(date, -1).slice(0, 10),
-    addDays(date, 1).slice(0, 10),
-  ]);
-  const departureDate = publicFlightDateForTimeZone(departureEpoch, originTimeZone);
-  const arrivalDate = publicFlightDateForTimeZone(arrivalEpoch, destinationTimeZone);
-  const easternDepartureDate = publicFlightDateForTimeZone(departureEpoch, "America/New_York");
-  const easternArrivalDate = publicFlightDateForTimeZone(arrivalEpoch, "America/New_York");
-  return [departureDate, arrivalDate, easternDepartureDate, easternArrivalDate].some((value) => value && dates.has(value));
+function publicFlightMatchesDepartureDate(departureEpoch, date, originTimeZone) {
+  return publicFlightDateForTimeZone(departureEpoch, originTimeZone) === date;
 }
 
 function publicFlightDateForTimeZone(epochSeconds, timeZone) {
@@ -1985,8 +1983,7 @@ function flightNumberFromPublicIdent(ident) {
 }
 
 function webLookupDates(date) {
-  const previousDate = addDays(date, -1).slice(0, 10);
-  return previousDate === date ? [date] : [date, previousDate];
+  return [date];
 }
 
 function browserHeaders() {
