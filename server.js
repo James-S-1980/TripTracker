@@ -63,7 +63,11 @@ app.use((request, response, next) => {
 app.get(["/healthz", "/trip/healthz"], (_request, response) => {
   const checks = {
     webAssets: healthFileCheck(path.join(__dirname, "dist", "index.html"), fs.constants.R_OK),
-    runtimeData: healthDirectoryCheck(runtimeDataDir),
+    runtimeData: healthRuntimeDataCheck(runtimeDataDir, [
+      serverTrackedFlightsPath,
+      notificationEventsPath,
+      untrackedFlightsPath,
+    ]),
     failureTest: healthFailureTestCheck(),
   };
   const healthy = Object.values(checks).every((check) => check.ok);
@@ -90,10 +94,13 @@ function healthFailureTestCheck() {
     : { ok: true };
 }
 
-function healthDirectoryCheck(directoryPath) {
+function healthRuntimeDataCheck(directoryPath, filePaths) {
   try {
     fs.mkdirSync(directoryPath, { recursive: true });
     fs.accessSync(directoryPath, fs.constants.R_OK | fs.constants.W_OK);
+    filePaths.forEach((filePath) => {
+      if (fs.existsSync(filePath)) fs.accessSync(filePath, fs.constants.R_OK | fs.constants.W_OK);
+    });
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Directory check failed." };
@@ -797,22 +804,31 @@ app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], (request, respons
 
 app.post(["/api/notifications/untrack", "/trip/api/notifications/untrack"], (request, response) => {
   const flight = request.body?.flight;
-  const key = flight ? trackedFlightKey(flight) : String(request.body?.key ?? "");
-  if (!key) {
+  const explicitKey = String(request.body?.key ?? "");
+  const keys = trackedFlightKeysForRemoval(flight, explicitKey);
+  if (keys.length === 0) {
     response.status(400).json({ error: "Flight is required to stop tracking." });
     return;
   }
-  untrackedFlights.add(key);
+  const addedKeys = keys.filter((key) => !untrackedFlights.has(key));
+  keys.forEach((key) => untrackedFlights.add(key));
   try {
     saveUntrackedFlights();
   } catch (error) {
-    untrackedFlights.delete(key);
+    addedKeys.forEach((key) => untrackedFlights.delete(key));
     response.status(500).json({ error: "Could not save the flight removal." });
     return;
   }
-  const removed = serverTrackedFlights.delete(key);
-  if (removed) saveServerTrackedFlights();
-  response.json({ ok: true, removed, serverTrackedFlights: serverTrackedFlights.size });
+  const removedCount = keys.reduce((count, key) => (
+    serverTrackedFlights.delete(key) ? count + 1 : count
+  ), 0);
+  if (removedCount > 0) saveServerTrackedFlights();
+  response.json({
+    ok: true,
+    removed: removedCount > 0,
+    removedCount,
+    serverTrackedFlights: serverTrackedFlights.size,
+  });
 });
 
 app.get(["/api/notifications/status", "/trip/api/notifications/status"], (request, response) => {
@@ -1180,6 +1196,20 @@ function trackedFlightKey(flight) {
   const args = lookupArgsFromFlight(flight);
   const designator = args ? `${args.airline}-${args.flightNumber}` : flight.flightNumber;
   return `${designator}-${flight.date}-${flight.origin?.code ?? ""}-${flight.destination?.code ?? ""}`;
+}
+
+function trackedFlightKeysForRemoval(flight, explicitKey = "") {
+  const keys = new Set();
+  if (explicitKey) keys.add(explicitKey);
+  if (!flight) return [...keys];
+
+  keys.add(trackedFlightKey(flight));
+  if (flight.id) {
+    for (const [key, record] of serverTrackedFlights.entries()) {
+      if (record.flight?.id === flight.id) keys.add(key);
+    }
+  }
+  return [...keys].filter(Boolean);
 }
 
 function notificationDeliveryKey(eventType, flight, changes) {

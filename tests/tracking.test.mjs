@@ -105,4 +105,13 @@ test("deleted leg stays untracked across stale registrations and a restart", asy
   server = await startServer(port, dataDir);
   await post(server.baseUrl, "/notifications/register-tracked", { flights: [first] });
   assert.deepEqual((await trackedFlights(server.baseUrl)).map((item) => item.origin.code), ["DEN"]);
+
+  const staleSecond = { ...second, flightNumber: "UAL 9999", date: "2026-09-20" };
+  const removal = await post(server.baseUrl, "/notifications/untrack", { flight: staleSecond });
+  assert.equal(removal.removed, true);
+  assert.equal(removal.removedCount, 1);
+  assert.deepEqual(await trackedFlights(server.baseUrl), []);
+
+  await post(server.baseUrl, "/notifications/register-tracked", { flights: [second] });
+  assert.deepEqual(await trackedFlights(server.baseUrl), []);
 });

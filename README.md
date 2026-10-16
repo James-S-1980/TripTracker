@@ -147,7 +147,7 @@ TripTracker sends email when a flight is first tracked and when tracked flight s
 npm run build
 ```
 
-The production container uses an Alpine Node runtime, installs only server dependencies, and runs as the non-root `node` user. Compose limits the application to 192 MiB of memory and the health-recovery sidecar to 64 MiB; persistent runtime data remains in the host-mounted `./data` directory.
+The production container uses an Alpine Node runtime and installs only server dependencies. Its startup entrypoint repairs ownership on the host-mounted `./data` directory before dropping privileges to the non-root `node` user. Compose limits the application to 192 MiB of memory and the health-recovery sidecar to 64 MiB.
 
 ## Airport catalog
 
