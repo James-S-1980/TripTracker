@@ -1,8 +1,8 @@
-import { AlertTriangle, Bell, CalendarDays, CloudSun, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Bell, CalendarDays, CheckCircle2, CloudSun, LoaderCircle, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { fetchAirportRunways, fetchTrackedFlights, lookupFlight, registerTrackedFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportRunways, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
 import type { AirportRunway, FlightLeg, FlightLookupResult, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -332,9 +332,11 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [weather, setWeather] = useState<Record<string, WeatherSnapshot>>({});
   const [airlineFocused, setAirlineFocused] = useState(false);
-  const [flightFocused, setFlightFocused] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [flightChoices, setFlightChoices] = useState<FlightLeg[]>([]);
+  const [liveMatches, setLiveMatches] = useState<FlightLeg[]>([]);
+  const [liveSearchMessage, setLiveSearchMessage] = useState<string | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
@@ -347,12 +349,7 @@ export function App() {
     ? `${activeFlight.inboundFrom.code} ${activeFlight.inboundFrom.city}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}${activeInboundStatus ? `, ${activeInboundStatus}` : ""}`
     : "";
   const airlineSuggestions = airlineMatches(airline).slice(0, 6);
-  const flightSuggestions = useMemo(() => {
-    const recent = flights.map((flight) => flight.flightNumber.split(" ")[1]);
-    return Array.from(new Set([...recent, "401", "982", "1175", "2027", "3301"]))
-      .filter((value) => value.startsWith(flightNumber))
-      .slice(0, 5);
-  }, [flightNumber, flights]);
+  const hasLiveSearchInput = airline.trim().length >= 2 && flightNumber.length >= 2 && Boolean(date);
   const timeline = useMemo(() => {
     if (!activeFlight) return [];
     const routeItem = {
@@ -370,6 +367,40 @@ export function App() {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
     void registerTrackedFlights(flights);
   }, [flights]);
+
+  useEffect(() => {
+    if (!hasLiveSearchInput) {
+      setLiveMatches([]);
+      setLiveSearchMessage(null);
+      setIsSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setIsSearching(true);
+      setLiveSearchMessage(null);
+      searchFlights(airline.trim(), flightNumber, date, controller.signal)
+        .then((result) => {
+          if (controller.signal.aborted) return;
+          setLiveMatches(result.flights);
+          setLiveSearchMessage(result.message);
+        })
+        .catch((error) => {
+          if (controller.signal.aborted) return;
+          setLiveMatches([]);
+          setLiveSearchMessage(error instanceof Error ? error.message : "Live flight search is temporarily unavailable.");
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setIsSearching(false);
+        });
+    }, 650);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [airline, date, flightNumber, hasLiveSearchInput]);
 
   useEffect(() => {
     let cancelled = false;
@@ -424,6 +455,8 @@ export function App() {
     setIsLoading(true);
     setLookupError(null);
     setFlightChoices([]);
+    setLiveMatches([]);
+    setLiveSearchMessage(null);
     try {
       const result = await lookupFlight(airline.trim(), flightNumber.trim(), date, { track: true });
       if (isAmbiguousLookup(result)) {
@@ -457,6 +490,8 @@ export function App() {
       deletedFlightKeysRef.current.delete(flightIdentityKey(flight));
       setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
       setActiveId(flight.id);
+      setLiveMatches([]);
+      setLiveSearchMessage(null);
       setFlightChoices([]);
       setLastRefreshAt(new Date().toISOString());
     } catch (error) {
@@ -682,7 +717,10 @@ export function App() {
                 {airlineFocused && airlineSuggestions.length > 0 && (
                   <div className="suggestions">
                     {airlineSuggestions.map((match) => (
-                      <button type="button" key={match.code} onClick={() => setAirline(match.name)}>
+                      <button type="button" key={match.code} onClick={() => {
+                        setAirline(match.name);
+                        setAirlineFocused(false);
+                      }}>
                         <AirlineLogo code={match.code} logoUrl={match.logoUrl} size="small" />
                         <strong>{match.code}</strong>
                         <span>{match.name}</span>
@@ -697,25 +735,13 @@ export function App() {
               <div className="smart-field">
                 <input
                   value={flightNumber}
-                  onBlur={() => window.setTimeout(() => setFlightFocused(false), 120)}
                   onChange={(event) => {
                     setFlightNumber(event.target.value.replace(/\D/g, ""));
                     setFlightChoices([]);
                   }}
-                  onFocus={() => setFlightFocused(true)}
                   inputMode="numeric"
                   placeholder="Enter flight number"
                 />
-                {flightFocused && flightSuggestions.length > 0 && (
-                  <div className="suggestions compact">
-                    {flightSuggestions.map((match) => (
-                      <button type="button" key={match} onClick={() => setFlightNumber(match)}>
-                        <strong>{match}</strong>
-                        <span>Suggested flight</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </label>
             <label>
@@ -730,6 +756,46 @@ export function App() {
               {isLoading ? "Checking" : "Track flight"}
             </button>
             {lookupError && <p className="lookup-error">{lookupError}</p>}
+            {hasLiveSearchInput && flightChoices.length === 0 && (
+              <div className="live-search-results" aria-live="polite">
+                <div className={`live-search-feedback ${liveMatches.length > 0 ? "found" : ""}`}>
+                  {isSearching ? <LoaderCircle className="spin" size={17} /> : liveMatches.length > 0 ? <CheckCircle2 size={17} /> : <Search size={17} />}
+                  <span>{isSearching ? "Searching live flight schedules..." : liveSearchMessage ?? "Waiting for flight details..."}</span>
+                </div>
+                {!isSearching && liveMatches.map((match) => (
+                  <div className="live-search-result" key={match.id}>
+                    <AirlineLogo code={match.airlineCode} logoUrl={match.airlineLogoUrl} size="small" />
+                    <div className="live-search-flight">
+                      <div>
+                        <strong>{match.flightNumber}</strong>
+                        <span>{match.status}</span>
+                      </div>
+                      <div className="live-search-route">
+                        <span>
+                          <strong>{match.origin.code}</strong>
+                          <small>{formatZonedTime(match.departureTime, match.origin.timeZone)}</small>
+                        </span>
+                        <ArrowRight size={16} />
+                        <span>
+                          <strong>{match.destination.code}</strong>
+                          <small>{formatZonedTime(match.arrivalTime, match.destination.timeZone)}</small>
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      aria-label={`Track ${match.flightNumber} from ${match.origin.code} to ${match.destination.code}`}
+                      className="track-search-result"
+                      disabled={isLoading}
+                      onClick={() => void trackSelectedFlight(match)}
+                      type="button"
+                    >
+                      <Search size={15} />
+                      Track
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             {flightChoices.length > 0 && (
               <div className="flight-choices">
                 {flightChoices.map((choice) => (

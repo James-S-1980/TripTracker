@@ -22,6 +22,7 @@ const milesToNauticalMiles = 0.868976;
 const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
+const flightSearchCacheMs = 60 * 1000;
 const serverTrackingPollMs = 30000;
 const landedDisplayMs = 10 * 60 * 1000;
 const runtimeDataDir = process.env.TRIPTRACKER_DATA_DIR ?? path.join(__dirname, "data");
@@ -32,6 +33,7 @@ const generatedAirports = JSON.parse(fs.readFileSync(path.join(__dirname, "src",
 const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "airlineCatalog.generated.json"), "utf8"));
 const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "runwayCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
+const flightSearchCache = new Map();
 const serverTrackedFlights = new Map();
 const untrackedFlights = new Set();
 const notificationDeliveryKeys = new Map();
@@ -669,6 +671,50 @@ app.get(["/api/flights/lookup", "/trip/api/flights/lookup"], async (request, res
   }
 });
 
+app.get(["/api/flights/search", "/trip/api/flights/search"], async (request, response) => {
+  const requestedAirline = String(request.query.airline ?? "").trim().toUpperCase();
+  const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
+  const date = String(request.query.date ?? "").trim();
+  if (!/^[A-Z0-9]{2,3}$/.test(requestedAirline) || !/^\d{1,4}$/.test(flightNumber) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    response.status(400).json({ error: "Airline, flight number, and date are required for live search." });
+    return;
+  }
+
+  const cacheKey = `${requestedAirline}:${flightNumber}:${date}`;
+  const cached = flightSearchCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    response.json(cached.payload);
+    return;
+  }
+
+  try {
+    const result = await lookupFlightData(requestedAirline, flightNumber, date, {
+      allowAmbiguous: true,
+      summaryOnly: true,
+    });
+    const flights = result?.ambiguous ? result.flights : result ? [result] : [];
+    const payload = {
+      flights: flights.slice(0, 8),
+      message: flights.length === 1
+        ? "1 matching flight found"
+        : `${flights.length} matching flights found`,
+    };
+    cacheFlightSearch(cacheKey, payload);
+    response.json(payload);
+  } catch {
+    const payload = { flights: [], message: "No matching flight found yet" };
+    cacheFlightSearch(cacheKey, payload, 15 * 1000);
+    response.json(payload);
+  }
+});
+
+function cacheFlightSearch(key, payload, ttl = flightSearchCacheMs) {
+  if (flightSearchCache.size >= 100) {
+    flightSearchCache.delete(flightSearchCache.keys().next().value);
+  }
+  flightSearchCache.set(key, { payload, expiresAt: Date.now() + ttl });
+}
+
 app.get(["/api/runways", "/trip/api/runways"], (request, response) => {
   const airportCodes = String(request.query.airports ?? "")
     .split(",")
@@ -689,6 +735,7 @@ async function lookupFlightData(requestedAirline, flightNumber, date, options = 
   });
   if (flightAwareFlight) {
     if (flightAwareFlight.ambiguous) return flightAwareFlight;
+    if (options.summaryOnly) return flightAwareFlight;
     const enrichedFlight = await enrichFlightAwarePublicMetadata(flightAwareFlight, ident).catch(() => flightAwareFlight);
     return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
@@ -698,6 +745,8 @@ async function lookupFlightData(requestedAirline, flightNumber, date, options = 
     return null;
   });
   if (webFlight) {
+    if (webFlight.ambiguous) return webFlight;
+    if (options.summaryOnly) return webFlight;
     const enrichedFlight = await enrichFlightAwarePublicMetadata(webFlight, ident).catch(() => webFlight);
     return reconcileEstimatedArrival(await enrichAdsbPosition(enrichedFlight, ident));
   }
@@ -1479,7 +1528,9 @@ async function lookupFlightAware(ident, date, options = {}) {
 
   if (options.selectedFlightId) {
     const selectedFlight = await fetchFlightAwareFlightById(options.selectedFlightId, apiKey);
-    return selectedFlight ? enrichFlightAwarePosition(mapFlightAwareFlight(selectedFlight, date), apiKey) : null;
+    if (!selectedFlight) return null;
+    const mappedFlight = mapFlightAwareFlight(selectedFlight, date);
+    return options.summaryOnly ? mappedFlight : enrichFlightAwarePosition(mappedFlight, apiKey);
   }
 
   const params = new URLSearchParams({
@@ -1502,7 +1553,9 @@ async function lookupFlightAware(ident, date, options = {}) {
     return ambiguousFlightLookup(candidates, ident, date);
   }
   const flight = chooseFlight(payload.flights ?? [], date);
-  return flight ? enrichFlightAwarePosition(mapFlightAwareFlight(flight, date), apiKey) : null;
+  if (!flight) return null;
+  const mappedFlight = mapFlightAwareFlight(flight, date);
+  return options.summaryOnly ? mappedFlight : enrichFlightAwarePosition(mappedFlight, apiKey);
 }
 
 async function lookupWebFlight(ident, airline, flightNumber, date, options = {}) {
@@ -1523,6 +1576,8 @@ async function lookupWebFlight(ident, airline, flightNumber, date, options = {})
         if (selected) return await enrichFlightStatsSegmentCandidate(selected, ident, airline, flightNumber, lookupDate);
       } else if (options.allowAmbiguous && candidates.length > 1) {
         return ambiguousFlightLookupFromMappedFlights(candidates, ident, lookupDate);
+      } else if (options.summaryOnly && candidates.length === 1) {
+        return candidates[0];
       }
     } catch (error) {
       errors.push(error instanceof Error ? `FlightStats candidates ${lookupDate}: ${error.message}` : `FlightStats candidates ${lookupDate}: parse failed.`);

@@ -1,5 +1,5 @@
 import { resolveAirline } from "./airlines";
-import type { FlightLeg, FlightLookupResult, RunwayCatalog } from "./types";
+import type { FlightLeg, FlightLookupResult, FlightSearchResult, RunwayCatalog } from "./types";
 
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
@@ -23,6 +23,23 @@ export async function lookupFlight(airlineInput: string, flightNumber: string, d
     throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? `Flight lookup failed with HTTP ${response.status}.`);
   }
   return await response.json() as FlightLookupResult;
+}
+
+export async function searchFlights(airlineInput: string, flightNumber: string, date: string, signal?: AbortSignal): Promise<FlightSearchResult> {
+  const airline = resolveAirline(airlineInput);
+  const params = new URLSearchParams({ airline: airline.code, flightNumber, date });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}/flights/search?${params.toString()}`, { signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new Error("Live flight search is temporarily unavailable.");
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(payload?.error ?? `Live flight search failed with HTTP ${response.status}.`);
+  }
+  return await response.json() as FlightSearchResult;
 }
 
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {

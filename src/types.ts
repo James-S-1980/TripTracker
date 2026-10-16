@@ -48,6 +48,11 @@ export type FlightLookupResult = FlightLeg | {
   message: string;
 };
 
+export type FlightSearchResult = {
+  flights: FlightLeg[];
+  message: string;
+};
+
 export type AircraftPosition = {
   lat: number;
   lon: number;
