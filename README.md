@@ -139,7 +139,11 @@ The route map uses OpenStreetMap's standard raster tiles, which do not require a
 
 ## Email notifications
 
-TripTracker sends email when a flight is first tracked and when tracked flight status, gate, time, tail, or inbound details change. Set `TRIPTRACKER_SMTP_USER`, `TRIPTRACKER_SMTP_APP_PASSWORD`, and `TRIPTRACKER_SMS_TO` in `.env.local`; despite its legacy name, `TRIPTRACKER_SMS_TO` is the email recipient. Do not commit `.env.local`.
+TripTracker sends an initial email when tracking starts, then limits email to operationally important changes. Critical email includes a delay or cancellation, a departure or arrival gate assignment/change, and a cumulative departure or arrival time movement of at least 10 minutes. Tail-number, inbound-aircraft, position, altitude, speed, and other routine enrichment changes remain visible in the app without generating email.
+
+Five one-time milestone emails are sent for takeoff, 50% route progress, descent, approximately 10 minutes to touchdown, and landing. Descent detection requires a sustained drop in live aircraft altitude; schedule-estimated altitude is never treated as descent evidence. Milestone and notification baseline state is stored with each server-tracked flight in `data/server-tracked-flights.json`, so a container restart does not resend completed milestones. A landed flight remains visible for 10 minutes and is then removed silently rather than generating an additional conclusion email.
+
+Set `TRIPTRACKER_SMTP_USER`, `TRIPTRACKER_SMTP_APP_PASSWORD`, and `TRIPTRACKER_SMS_TO` in `.env.local`; despite its legacy name, `TRIPTRACKER_SMS_TO` is the email recipient. Do not commit `.env.local`.
 
 ## Build
 
