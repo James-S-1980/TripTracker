@@ -1,5 +1,5 @@
 import { resolveAirline } from "./airlines";
-import type { FlightLeg, FlightLookupResult, FlightSearchResult, RunwayCatalog } from "./types";
+import type { FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
 
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
@@ -40,6 +40,24 @@ export async function searchFlights(airlineInput: string, flightNumber: string, 
     throw new Error(payload?.error ?? `Live flight search failed with HTTP ${response.status}.`);
   }
   return await response.json() as FlightSearchResult;
+}
+
+export async function fetchFlightStatistics(flight: FlightLeg, signal?: AbortSignal): Promise<FlightStatistics> {
+  const [airline, flightNumber] = splitFlightDesignator(flight.flightNumber);
+  const params = new URLSearchParams({
+    airline: flight.airlineCode || airline,
+    flightNumber,
+    origin: flight.origin.code,
+    destination: flight.destination.code,
+    date: flight.date,
+    originTimeZone: flight.origin.timeZone || "Etc/UTC",
+  });
+  const response = await fetch(`${apiBase()}/flights/statistics?${params.toString()}`, { signal });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "Flight statistics are unavailable.");
+  }
+  return await response.json() as FlightStatistics;
 }
 
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {
@@ -93,4 +111,9 @@ function compactFlightForRegistration(flight: FlightLeg): Partial<FlightLeg> {
     track: undefined,
     alerts: flight.alerts?.slice(0, 4) ?? [],
   };
+}
+
+function splitFlightDesignator(value: string): [string, string] {
+  const match = value.trim().match(/^([A-Z0-9]{2,3})\s*(\d+)$/i);
+  return match ? [match[1].toUpperCase(), match[2]] : ["", value.replace(/\D/g, "")];
 }

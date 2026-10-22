@@ -1,10 +1,10 @@
-import { AlertTriangle, ArrowRight, Bell, CalendarDays, CheckCircle2, CloudSun, LoaderCircle, MapPin, Plane, Radar, RefreshCw, Search, Timer, Trash2 } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, BarChart3, Bell, CalendarDays, CheckCircle2, CloudSun, History, LoaderCircle, MapPin, Plane, Radar, RefreshCw, Search, ShieldCheck, Timer, Trash2 } from "lucide-react";
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { fetchAirportRunways, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
-import type { AirportRunway, FlightLeg, FlightLookupResult, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
+import type { AirportRunway, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
@@ -32,6 +32,13 @@ type RunwayApproach = {
   crossTrackNm?: number;
   distanceToThresholdNm?: number;
   headingDeltaDeg?: number;
+};
+type DelayOutlook = {
+  label: "Low" | "Moderate" | "High" | "Complete" | "Unknown";
+  tone: "low" | "moderate" | "high" | "complete" | "unknown";
+  score: number | null;
+  summary: string;
+  factors: string[];
 };
 
 function notifyFlightEvent(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): void {
@@ -320,6 +327,102 @@ function nextActiveId(currentActiveId: string | null, currentFlights: FlightLeg[
   return nextFlights.find((flight) => flightIdentityKey(flight) === currentFlightKey)?.id ?? nextFlights[0].id;
 }
 
+function delayOutlook(
+  flight: FlightLeg,
+  statistics: FlightStatistics,
+  originWeather?: WeatherSnapshot,
+  destinationWeather?: WeatherSnapshot,
+): DelayOutlook {
+  if (flight.status === "Landed" || flight.status === "Arrived") {
+    return {
+      label: "Complete",
+      tone: "complete",
+      score: 0,
+      summary: "This flight has completed. The history below remains available for context.",
+      factors: [],
+    };
+  }
+
+  let score = statistics.historicalRiskPercent ?? 25;
+  const factors: string[] = [];
+  let hasCurrentSignal = false;
+
+  if (flight.status === "Cancelled") {
+    score = 100;
+    factors.push("This flight is currently cancelled");
+    hasCurrentSignal = true;
+  } else if (flight.status === "Delayed") {
+    score = Math.max(score, 90);
+    factors.push("The live status already reports a delay");
+    hasCurrentSignal = true;
+  }
+
+  if (flight.inboundStatus === "Cancelled") {
+    score += 30;
+    factors.push("The assigned inbound flight is cancelled");
+    hasCurrentSignal = true;
+  } else if (flight.inboundStatus === "Delayed") {
+    score += 18;
+    factors.push("The inbound aircraft is delayed");
+    hasCurrentSignal = true;
+  } else if ((flight.inboundStatus === "Scheduled" || flight.inboundStatus === "Boarding") &&
+    new Date(flight.departureTime).getTime() - Date.now() < 90 * 60 * 1000 &&
+    new Date(flight.departureTime).getTime() > Date.now()) {
+    score += 10;
+    factors.push("The inbound aircraft has not departed with less than 90 minutes to scheduled departure");
+    hasCurrentSignal = true;
+  }
+
+  [
+    { label: "Origin", weather: originWeather },
+    { label: "Destination", weather: destinationWeather },
+  ].forEach(({ label, weather }) => {
+    if (!weather || weather.condition === "Unavailable") return;
+    if (/thunder|snow|fog|freezing/i.test(weather.condition)) {
+      score += 12;
+      factors.push(`${label} weather reports ${weather.condition.toLowerCase()}`);
+      hasCurrentSignal = true;
+    } else if (/rain|shower/i.test(weather.condition)) {
+      score += 5;
+      factors.push(`${label} weather reports ${weather.condition.toLowerCase()}`);
+      hasCurrentSignal = true;
+    }
+    if (weather.windMph >= 25) {
+      score += 8;
+      factors.push(`${label} winds are ${weather.windMph} mph`);
+      hasCurrentSignal = true;
+    }
+  });
+
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  if (statistics.sampleSize === 0 && !hasCurrentSignal) {
+    return {
+      label: "Unknown",
+      tone: "unknown",
+      score: null,
+      summary: "Not enough route-matched history or live warning signals are available for a useful assessment.",
+      factors: [],
+    };
+  }
+
+  const label = score < 25 ? "Low" : score < 45 ? "Moderate" : "High";
+  const summary = statistics.sampleSize > 0
+    ? `${statistics.delayedFlights + statistics.cancelledFlights} of ${statistics.sampleSize} recent route-matched flights had a 15+ minute departure delay or cancellation.`
+    : "This assessment is based on current operational signals because route history is limited.";
+  return { label, tone: label.toLowerCase() as DelayOutlook["tone"], score, summary, factors };
+}
+
+function delayVarianceLabel(value: number | null): string {
+  if (value === null) return "Pending";
+  if (value < 0) return `${Math.abs(value)}m early`;
+  if (value === 0) return "On schedule";
+  return `${value}m late`;
+}
+
+function historyDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
+}
+
 export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
@@ -338,11 +441,15 @@ export function App() {
   const [liveSearchMessage, setLiveSearchMessage] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  const [statistics, setStatistics] = useState<FlightStatistics | null>(null);
+  const [statisticsError, setStatisticsError] = useState<string | null>(null);
+  const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
   const deletedFlightKeysRef = useRef<Set<string>>(new Set());
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
+  const activeStatisticsKey = activeFlight ? flightIdentityKey(activeFlight) : "";
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
   const activeInboundStatus = inboundStatusLabel(activeFlight?.inboundStatus);
   const activeInboundText = activeFlight?.inboundFrom
@@ -448,6 +555,34 @@ export function App() {
         });
     });
   }, [activeFlight, weather]);
+
+  useEffect(() => {
+    const flight = activeFlight;
+    if (!flight) {
+      setStatistics(null);
+      setStatisticsError(null);
+      setIsLoadingStatistics(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setStatistics(null);
+    setStatisticsError(null);
+    setIsLoadingStatistics(true);
+    fetchFlightStatistics(flight, controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setStatistics(result);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setStatisticsError(error instanceof Error ? error.message : "Historical statistics are unavailable.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingStatistics(false);
+      });
+
+    return () => controller.abort();
+  }, [activeStatisticsKey]);
 
   async function addFlight(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -941,6 +1076,15 @@ export function App() {
                 </article>
               </section>
 
+              <FlightStatisticsPanel
+                error={statisticsError}
+                flight={activeFlight}
+                isLoading={isLoadingStatistics}
+                originWeather={weather[activeFlight.origin.code]}
+                destinationWeather={weather[activeFlight.destination.code]}
+                statistics={statistics}
+              />
+
               <div className="detail-grid">
                 <WeatherCard title="Origin weather" code={activeFlight.origin.code} weather={weather[activeFlight.origin.code]} />
                 <WeatherCard title="Destination weather" code={activeFlight.destination.code} weather={weather[activeFlight.destination.code]} />
@@ -989,6 +1133,135 @@ function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUr
         <strong>{normalizedCode.slice(0, 2)}</strong>
       )}
     </span>
+  );
+}
+
+function FlightStatisticsPanel({
+  flight,
+  statistics,
+  originWeather,
+  destinationWeather,
+  isLoading,
+  error,
+}: {
+  flight: FlightLeg;
+  statistics: FlightStatistics | null;
+  originWeather?: WeatherSnapshot;
+  destinationWeather?: WeatherSnapshot;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className={`reliability-panel ${statistics ? `risk-${delayOutlook(flight, statistics, originWeather, destinationWeather).tone}` : "risk-unknown"}`}>
+      <div className="reliability-heading">
+        <div className="section-heading">
+          <BarChart3 size={19} />
+          <h2>Flight Reliability</h2>
+        </div>
+        <span><History size={14} /> Recent route history</span>
+      </div>
+
+      {isLoading && (
+        <div className="statistics-state" aria-live="polite">
+          <LoaderCircle className="spin" size={21} />
+          <div>
+            <strong>Analyzing recent operations</strong>
+            <span>Matching {flight.flightNumber} history for {flight.origin.code} to {flight.destination.code}</span>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && error && (
+        <div className="statistics-state error" role="status">
+          <AlertTriangle size={21} />
+          <div>
+            <strong>Reliability history unavailable</strong>
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && statistics && (() => {
+        const outlook = delayOutlook(flight, statistics, originWeather, destinationWeather);
+        return (
+          <>
+            <div className="risk-overview">
+              <div className="risk-verdict">
+                <small>Overall delay outlook</small>
+                <strong>{outlook.label}</strong>
+                <span>{statistics.confidence} historical confidence</span>
+              </div>
+              <div className="risk-evidence">
+                <div
+                  aria-label={`${outlook.label} delay risk`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={outlook.score ?? undefined}
+                  className="risk-scale"
+                  role="meter"
+                >
+                  <i style={{ width: `${outlook.score ?? 0}%` }} />
+                </div>
+                <p>{outlook.summary}</p>
+                {outlook.factors.length > 0 && (
+                  <div className="risk-factors" aria-label="Current risk factors">
+                    {outlook.factors.slice(0, 4).map((factor) => <span key={factor}>{factor}</span>)}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="history-metrics">
+              <div>
+                <ShieldCheck size={18} />
+                <strong>{statistics.sampleSize > 0 ? `${statistics.onTimeRate}%` : "--"}</strong>
+                <span>On time</span>
+              </div>
+              <div>
+                <Timer size={18} />
+                <strong>{statistics.sampleSize > 0 ? `${statistics.delayRate}%` : "--"}</strong>
+                <span>Departed 15m+ late</span>
+              </div>
+              <div>
+                <AlertTriangle size={18} />
+                <strong>{statistics.cancelledFlights}</strong>
+                <span>Cancellations</span>
+              </div>
+              <div>
+                <Activity size={18} />
+                <strong>{delayVarianceLabel(statistics.averageDepartureDelayMinutes)}</strong>
+                <span>Average departure</span>
+              </div>
+            </div>
+
+            <div className="history-issues">
+              <div>
+                <strong>Recent issues</strong>
+                <span>{statistics.sampleSize} prior {statistics.route} operations analyzed</span>
+              </div>
+              {statistics.recentIssues.length > 0 ? (
+                <ul>
+                  {statistics.recentIssues.map((record) => (
+                    <li className={`history-${record.outcome.toLowerCase().replace(/\s+/g, "-")}`} key={`${record.date}-${record.outcome}`}>
+                      <time dateTime={record.date}>{historyDate(record.date)}</time>
+                      <strong>{record.outcome}</strong>
+                      <span>{record.outcome === "Cancelled" ? "Flight did not operate" : delayVarianceLabel(record.departureDelayMinutes ?? null)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No 15+ minute departure delays or cancellations appear in the available sample.</p>
+              )}
+            </div>
+
+            <p className="statistics-source">
+              {statistics.coverage}. This is an estimate, not a guarantee. Source: {" "}
+              <a href={statistics.sourceUrl} rel="noreferrer" target="_blank">{statistics.source}</a>.
+            </p>
+          </>
+        );
+      })()}
+    </section>
   );
 }
 

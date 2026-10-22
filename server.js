@@ -3,6 +3,7 @@ import fs from "node:fs";
 import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseFlightAwareHistory, summarizeFlightHistory } from "./server/flightStatistics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +24,7 @@ const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const flightSearchCacheMs = 60 * 1000;
+const flightStatisticsCacheMs = 6 * 60 * 60 * 1000;
 const serverTrackingPollMs = 30000;
 const landedDisplayMs = 10 * 60 * 1000;
 const runtimeDataDir = process.env.TRIPTRACKER_DATA_DIR ?? path.join(__dirname, "data");
@@ -34,6 +36,7 @@ const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src",
 const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "runwayCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
 const flightSearchCache = new Map();
+const flightStatisticsCache = new Map();
 const serverTrackedFlights = new Map();
 const untrackedFlights = new Set();
 const notificationDeliveryKeys = new Map();
@@ -720,6 +723,87 @@ function cacheFlightSearch(key, payload, ttl = flightSearchCacheMs) {
     flightSearchCache.delete(flightSearchCache.keys().next().value);
   }
   flightSearchCache.set(key, { payload, expiresAt: Date.now() + ttl });
+}
+
+app.get(["/api/flights/statistics", "/trip/api/flights/statistics"], async (request, response) => {
+  const requestedAirline = String(request.query.airline ?? "").trim().toUpperCase();
+  const flightNumber = String(request.query.flightNumber ?? "").replace(/\D/g, "");
+  const origin = String(request.query.origin ?? "").trim().toUpperCase();
+  const destination = String(request.query.destination ?? "").trim().toUpperCase();
+  const date = String(request.query.date ?? "").trim();
+  const originTimeZone = String(request.query.originTimeZone ?? "Etc/UTC").trim();
+  if (!/^[A-Z0-9]{2,3}$/.test(requestedAirline) || !/^\d{1,4}$/.test(flightNumber) ||
+    !/^[A-Z0-9]{3}$/.test(origin) || !/^[A-Z0-9]{3}$/.test(destination) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    response.status(400).json({ error: "Airline, flight number, route, and date are required for flight statistics." });
+    return;
+  }
+
+  const airline = normalizeAirlineCode(requestedAirline);
+  const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
+  const cacheKey = `${ident}:${origin}:${destination}:${date}`;
+  const cached = flightStatisticsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    response.json(cached.payload);
+    return;
+  }
+
+  try {
+    const payload = await lookupFlightStatistics({
+      ident,
+      airline,
+      flightNumber,
+      origin,
+      destination,
+      date,
+      originTimeZone,
+    });
+    if (flightStatisticsCache.size >= 100) {
+      flightStatisticsCache.delete(flightStatisticsCache.keys().next().value);
+    }
+    flightStatisticsCache.set(cacheKey, { payload, expiresAt: Date.now() + flightStatisticsCacheMs });
+    response.json(payload);
+  } catch (error) {
+    response.status(502).json({
+      error: "Historical flight statistics are temporarily unavailable.",
+      detail: error instanceof Error ? error.message : "Flight history lookup failed.",
+    });
+  }
+});
+
+async function lookupFlightStatistics({ ident, airline, flightNumber, origin, destination, date, originTimeZone }) {
+  const sourceUrl = `https://www.flightaware.com/live/flight/${encodeURIComponent(ident)}/history`;
+  const [historyResponse, currentPublicFlight] = await Promise.all([
+    fetch(sourceUrl, { headers: browserHeaders() }),
+    fetchFlightAwarePublicFlight(`https://www.flightaware.com/live/flight/${encodeURIComponent(ident)}`).catch(() => null),
+  ]);
+  if (!historyResponse.ok) {
+    throw new Error(`FlightAware history returned ${historyResponse.status}.`);
+  }
+
+  const currentRouteMatches = publicAirportCode(currentPublicFlight?.origin) === origin &&
+    publicAirportCode(currentPublicFlight?.destination) === destination;
+  const originAliases = currentRouteMatches
+    ? [currentPublicFlight?.origin?.icao, currentPublicFlight?.origin?.altIdent]
+    : [];
+  const destinationAliases = currentRouteMatches
+    ? [currentPublicFlight?.destination?.icao, currentPublicFlight?.destination?.altIdent]
+    : [];
+  const records = parseFlightAwareHistory(await historyResponse.text(), {
+    origin,
+    destination,
+    originTimeZone,
+    targetDate: date,
+    originAliases,
+    destinationAliases,
+    limit: 14,
+  });
+
+  return summarizeFlightHistory(records, {
+    flightNumber: `${airline} ${flightNumber}`,
+    origin,
+    destination,
+    sourceUrl,
+  });
 }
 
 app.get(["/api/runways", "/trip/api/runways"], (request, response) => {

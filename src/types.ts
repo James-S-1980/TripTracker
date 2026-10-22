@@ -53,6 +53,43 @@ export type FlightSearchResult = {
   message: string;
 };
 
+export type FlightHistoryRecord = {
+  date: string;
+  aircraft?: string;
+  origin: string;
+  destination: string;
+  scheduledDepartureLocal?: string;
+  actualDepartureLocal?: string;
+  departureDelayMinutes?: number;
+  outcome: "Completed" | "Delayed" | "Severely delayed" | "Cancelled";
+};
+
+export type FlightStatistics = {
+  flightNumber: string;
+  route: string;
+  sampleSize: number;
+  completedFlights: number;
+  onTimeFlights: number;
+  delayedFlights: number;
+  severeDelayFlights: number;
+  cancelledFlights: number;
+  onTimeRate: number;
+  delayRate: number;
+  cancellationRate: number;
+  issueRate: number;
+  averageDepartureDelayMinutes: number | null;
+  medianDepartureDelayMinutes: number | null;
+  historicalRiskPercent: number | null;
+  historicalAssessment: "Low" | "Moderate" | "High" | "Insufficient data";
+  confidence: "Limited" | "Moderate" | "Strong";
+  recentIssues: FlightHistoryRecord[];
+  records: FlightHistoryRecord[];
+  source: string;
+  sourceUrl: string;
+  updatedAt: string;
+  coverage: string;
+};
+
 export type AircraftPosition = {
   lat: number;
   lon: number;

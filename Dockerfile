@@ -17,6 +17,7 @@ WORKDIR /app
 RUN apk add --no-cache su-exec
 COPY --from=production-dependencies --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json server.js ./
+COPY --chown=node:node server ./server/
 COPY --chown=node:node scripts/healthcheck.mjs ./scripts/
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --chown=node:node src/*.generated.json ./src/
