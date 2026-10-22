@@ -90,6 +90,59 @@ export type FlightStatistics = {
   coverage: string;
 };
 
+export type AirportDelayEventType =
+  | "airport_closure"
+  | "airport_restriction"
+  | "ground_stop"
+  | "ground_delay"
+  | "arrival_delay"
+  | "departure_delay"
+  | "deicing";
+
+export type AirportDelaySeverity = "clear" | "unknown" | "info" | "minor" | "major" | "critical";
+
+export type AirportDelayEvent = {
+  type: AirportDelayEventType;
+  title: string;
+  severity: Exclude<AirportDelaySeverity, "clear" | "unknown">;
+  reason?: string;
+  summary: string;
+  averageDelayMinutes?: number;
+  trend?: string;
+  startTime?: string;
+  endTime?: string;
+  probabilityOfExtension?: string;
+  scope: string[];
+  advisoryUrl?: string;
+  sourceUpdatedAt?: string;
+};
+
+export type AirportDelayStatus = {
+  airportCode: string;
+  airportName: string;
+  city?: string;
+  timeZone?: string;
+  status: string;
+  severity: AirportDelaySeverity;
+  continuouslyMonitored: boolean;
+  events: AirportDelayEvent[];
+  runwayConfig?: {
+    arrivals?: string;
+    departures?: string;
+    arrivalRate?: number;
+  };
+  updatedAt: string;
+  coverage: string;
+};
+
+export type AirportDelayReport = {
+  airports: AirportDelayStatus[];
+  updatedAt: string;
+  source: string;
+  sourceUrl: string;
+  stale: boolean;
+};
+
 export type AircraftPosition = {
   lat: number;
   lon: number;

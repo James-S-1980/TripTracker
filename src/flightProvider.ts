@@ -1,5 +1,5 @@
 import { resolveAirline } from "./airlines";
-import type { FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
+import type { AirportDelayReport, FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
 
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
@@ -58,6 +58,16 @@ export async function fetchFlightStatistics(flight: FlightLeg, signal?: AbortSig
     throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "Flight statistics are unavailable.");
   }
   return await response.json() as FlightStatistics;
+}
+
+export async function fetchAirportDelays(airportCodes: string[], signal?: AbortSignal): Promise<AirportDelayReport> {
+  const airports = [...new Set(airportCodes.map((code) => code.trim().toUpperCase()).filter(Boolean))];
+  const response = await fetch(`${apiBase()}/airport-delays?${new URLSearchParams({ airports: airports.join(",") })}`, { signal });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "Airport delay status is unavailable.");
+  }
+  return await response.json() as AirportDelayReport;
 }
 
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {

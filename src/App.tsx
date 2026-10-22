@@ -2,9 +2,9 @@ import { Activity, AlertTriangle, ArrowRight, BarChart3, Bell, CalendarDays, Che
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
-import { fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { fetchWeather } from "./weather";
-import type { AirportRunway, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
+import type { AirportDelayEvent, AirportDelayReport, AirportDelayStatus, AirportRunway, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
@@ -332,6 +332,7 @@ function delayOutlook(
   statistics: FlightStatistics,
   originWeather?: WeatherSnapshot,
   destinationWeather?: WeatherSnapshot,
+  airportDelays?: AirportDelayReport | null,
 ): DelayOutlook {
   if (flight.status === "Landed" || flight.status === "Arrived") {
     return {
@@ -394,6 +395,34 @@ function delayOutlook(
     }
   });
 
+  [
+    { code: flight.origin.code, label: "Origin", role: "origin" as const },
+    { code: flight.destination.code, label: "Destination", role: "destination" as const },
+  ].forEach(({ code, label, role }) => {
+    const airport = airportDelays?.airports.find((item) => item.airportCode === code);
+    if (!airport) return;
+    const relevantEvents = airport.events.filter((event) => (
+      event.type === "airport_closure" ||
+      (role === "destination" && ["ground_stop", "ground_delay", "arrival_delay"].includes(event.type)) ||
+      (role === "origin" && ["departure_delay", "deicing"].includes(event.type))
+    ));
+    const event = relevantEvents[0];
+    if (!event) return;
+
+    const eventScore = {
+      airport_closure: 45,
+      ground_stop: 35,
+      ground_delay: Math.min(30, Math.max(15, Math.round((event.averageDelayMinutes ?? 30) / 2))),
+      arrival_delay: Math.min(24, Math.max(8, Math.round((event.averageDelayMinutes ?? 15) / 2))),
+      departure_delay: Math.min(24, Math.max(8, Math.round((event.averageDelayMinutes ?? 15) / 2))),
+      deicing: 8,
+      airport_restriction: 0,
+    }[event.type];
+    score += eventScore;
+    factors.push(`${label} airport: ${event.title.toLowerCase()}${event.averageDelayMinutes ? ` (${event.averageDelayMinutes}m avg)` : ""}`);
+    hasCurrentSignal = true;
+  });
+
   score = Math.max(0, Math.min(100, Math.round(score)));
   if (statistics.sampleSize === 0 && !hasCurrentSignal) {
     return {
@@ -444,12 +473,16 @@ export function App() {
   const [statistics, setStatistics] = useState<FlightStatistics | null>(null);
   const [statisticsError, setStatisticsError] = useState<string | null>(null);
   const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
+  const [airportDelays, setAirportDelays] = useState<AirportDelayReport | null>(null);
+  const [airportDelaysError, setAirportDelaysError] = useState<string | null>(null);
+  const [isLoadingAirportDelays, setIsLoadingAirportDelays] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
   const deletedFlightKeysRef = useRef<Set<string>>(new Set());
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
   const activeStatisticsKey = activeFlight ? flightIdentityKey(activeFlight) : "";
+  const activeAirportDelayKey = activeFlight ? `${activeFlight.origin.code}:${activeFlight.destination.code}` : "";
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
   const activeInboundStatus = inboundStatusLabel(activeFlight?.inboundStatus);
   const activeInboundText = activeFlight?.inboundFrom
@@ -583,6 +616,48 @@ export function App() {
 
     return () => controller.abort();
   }, [activeStatisticsKey]);
+
+  useEffect(() => {
+    const flight = activeFlight;
+    if (!flight) {
+      setAirportDelays(null);
+      setAirportDelaysError(null);
+      setIsLoadingAirportDelays(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let requestInProgress = false;
+    setAirportDelays(null);
+    setAirportDelaysError(null);
+    setIsLoadingAirportDelays(true);
+
+    const loadAirportDelays = async (initialLoad = false) => {
+      if (requestInProgress) return;
+      requestInProgress = true;
+      try {
+        const report = await fetchAirportDelays([flight.origin.code, flight.destination.code], controller.signal);
+        if (!controller.signal.aborted) {
+          setAirportDelays(report);
+          setAirportDelaysError(null);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setAirportDelaysError(error instanceof Error ? error.message : "Airport delay status is unavailable.");
+        }
+      } finally {
+        requestInProgress = false;
+        if (initialLoad && !controller.signal.aborted) setIsLoadingAirportDelays(false);
+      }
+    };
+
+    void loadAirportDelays(true);
+    const intervalId = window.setInterval(() => void loadAirportDelays(), 60 * 1000);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [activeAirportDelayKey]);
 
   async function addFlight(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1077,12 +1152,20 @@ export function App() {
               </section>
 
               <FlightStatisticsPanel
+                airportDelays={airportDelays}
                 error={statisticsError}
                 flight={activeFlight}
                 isLoading={isLoadingStatistics}
                 originWeather={weather[activeFlight.origin.code]}
                 destinationWeather={weather[activeFlight.destination.code]}
                 statistics={statistics}
+              />
+
+              <AirportDelayPanel
+                error={airportDelaysError}
+                flight={activeFlight}
+                isLoading={isLoadingAirportDelays}
+                report={airportDelays}
               />
 
               <div className="detail-grid">
@@ -1136,9 +1219,153 @@ function AirlineLogo({ code, logoUrl, size = "default" }: { code: string; logoUr
   );
 }
 
+function airportEventTimestamp(value: string | undefined, timeZone: string | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: timeZone || "America/New_York",
+    timeZoneName: "short",
+  }).format(date);
+}
+
+function AirportDelayPanel({
+  flight,
+  report,
+  isLoading,
+  error,
+}: {
+  flight: FlightLeg;
+  report: AirportDelayReport | null;
+  isLoading: boolean;
+  error: string | null;
+}) {
+  return (
+    <section className="airport-delay-panel">
+      <div className="airport-delay-heading">
+        <div className="section-heading">
+          <Radar size={19} />
+          <h2>Airport Delay Status</h2>
+        </div>
+        <span><Activity size={14} /> Current FAA operations</span>
+      </div>
+
+      {isLoading && (
+        <div className="statistics-state" aria-live="polite">
+          <LoaderCircle className="spin" size={21} />
+          <div>
+            <strong>Checking airport operations</strong>
+            <span>Looking for active FAA programs at {flight.origin.code} and {flight.destination.code}</span>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && error && !report && (
+        <div className="statistics-state error" role="status">
+          <AlertTriangle size={21} />
+          <div>
+            <strong>Airport status unavailable</strong>
+            <span>{error}</span>
+          </div>
+        </div>
+      )}
+
+      {report && (
+        <>
+          <div className="airport-delay-grid">
+            {report.airports.map((airport) => (
+              <AirportDelayCard
+                airport={airport}
+                key={airport.airportCode}
+                role={airport.airportCode === flight.origin.code ? "Origin" : "Destination"}
+              />
+            ))}
+          </div>
+          <p className="airport-delay-source">
+            {report.stale && <strong>Showing the last successful FAA update. </strong>}
+            Checked {formatTimestamp(report.updatedAt)}. Source: {" "}
+            <a href={report.sourceUrl} rel="noreferrer" target="_blank">{report.source}</a>.
+            {error && ` Latest refresh failed: ${error}`}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function AirportDelayCard({ airport, role }: { airport: AirportDelayStatus; role: "Origin" | "Destination" }) {
+  return (
+    <article className={`airport-delay-card severity-${airport.severity}`}>
+      <header>
+        <div>
+          <span>{role}</span>
+          <strong>{airport.airportCode}</strong>
+        </div>
+        <span className="airport-delay-status">{airport.status}</span>
+      </header>
+      <h3>{airport.airportName}</h3>
+
+      {airport.events.length === 0 ? (
+        <div className={`airport-clear-state ${airport.continuouslyMonitored ? "confirmed" : "limited"}`}>
+          {airport.continuouslyMonitored ? <CheckCircle2 size={22} /> : <Activity size={22} />}
+          <div>
+            <strong>{airport.continuouslyMonitored ? "No active FAA delay advisory" : "No current FAA event listed"}</strong>
+            <span>{airport.continuouslyMonitored
+              ? "No ground stop, ground-delay program, or airport-specific delay is listed in the current feed."
+              : "This airport is outside the FAA pacing-airport list, so the absence of an event is not an operational all-clear."}</span>
+          </div>
+        </div>
+      ) : (
+        <ul className="airport-event-list">
+          {airport.events.map((event, index) => (
+            <AirportEventRow airport={airport} event={event} key={`${event.type}-${index}`} />
+          ))}
+        </ul>
+      )}
+
+      {airport.runwayConfig && (
+        <div className="airport-runway-facts">
+          {airport.runwayConfig.arrivals && <span>Arrivals <strong>{airport.runwayConfig.arrivals}</strong></span>}
+          {airport.runwayConfig.departures && <span>Departures <strong>{airport.runwayConfig.departures}</strong></span>}
+          {airport.runwayConfig.arrivalRate !== undefined && <span>Arrival rate <strong>{airport.runwayConfig.arrivalRate}/hr</strong></span>}
+        </div>
+      )}
+
+      <p className="airport-coverage-note">
+        {airport.continuouslyMonitored ? "FAA pacing airport" : "Selective FAA coverage"} · {airport.coverage}
+      </p>
+    </article>
+  );
+}
+
+function AirportEventRow({ airport, event }: { airport: AirportDelayStatus; event: AirportDelayEvent }) {
+  const endTime = airportEventTimestamp(event.endTime, airport.timeZone);
+  const details = [
+    event.averageDelayMinutes !== undefined ? `Average ${event.averageDelayMinutes} min` : "",
+    event.trend || "",
+    endTime ? `Expected through ${endTime}` : "",
+    event.probabilityOfExtension ? `${event.probabilityOfExtension.toLowerCase()} extension probability` : "",
+  ].filter(Boolean).join(" · ");
+  return (
+    <li className={`severity-${event.severity}`}>
+      <AlertTriangle size={17} />
+      <div>
+        <strong>{event.title}</strong>
+        <p>{event.summary}</p>
+        {details && <span>{details}</span>}
+      </div>
+    </li>
+  );
+}
+
 function FlightStatisticsPanel({
   flight,
   statistics,
+  airportDelays,
   originWeather,
   destinationWeather,
   isLoading,
@@ -1146,13 +1373,14 @@ function FlightStatisticsPanel({
 }: {
   flight: FlightLeg;
   statistics: FlightStatistics | null;
+  airportDelays: AirportDelayReport | null;
   originWeather?: WeatherSnapshot;
   destinationWeather?: WeatherSnapshot;
   isLoading: boolean;
   error: string | null;
 }) {
   return (
-    <section className={`reliability-panel ${statistics ? `risk-${delayOutlook(flight, statistics, originWeather, destinationWeather).tone}` : "risk-unknown"}`}>
+    <section className={`reliability-panel ${statistics ? `risk-${delayOutlook(flight, statistics, originWeather, destinationWeather, airportDelays).tone}` : "risk-unknown"}`}>
       <div className="reliability-heading">
         <div className="section-heading">
           <BarChart3 size={19} />
@@ -1182,7 +1410,7 @@ function FlightStatisticsPanel({
       )}
 
       {!isLoading && statistics && (() => {
-        const outlook = delayOutlook(flight, statistics, originWeather, destinationWeather);
+        const outlook = delayOutlook(flight, statistics, originWeather, destinationWeather, airportDelays);
         return (
           <>
             <div className="risk-overview">

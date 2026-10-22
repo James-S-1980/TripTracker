@@ -3,6 +3,7 @@ import fs from "node:fs";
 import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { summarizeAirportOperations } from "./server/airportOperations.js";
 import { parseFlightAwareHistory, summarizeFlightHistory } from "./server/flightStatistics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,7 @@ fs.rmSync(healthFailureTestPath, { force: true });
 const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
+const faaNasBaseUrl = "https://nasstatus.faa.gov/api";
 const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "James.schliesske@gmail.com";
 const smsRecipients = smsRecipient.split(",").map((recipient) => recipient.trim()).filter(Boolean);
 const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
@@ -25,6 +27,7 @@ const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const flightSearchCacheMs = 60 * 1000;
 const flightStatisticsCacheMs = 6 * 60 * 60 * 1000;
+const airportOperationsCacheMs = 60 * 1000;
 const serverTrackingPollMs = 30000;
 const landedDisplayMs = 10 * 60 * 1000;
 const runtimeDataDir = process.env.TRIPTRACKER_DATA_DIR ?? path.join(__dirname, "data");
@@ -37,6 +40,8 @@ const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", 
 const adsbPointCache = new Map();
 const flightSearchCache = new Map();
 const flightStatisticsCache = new Map();
+let airportOperationsCache = null;
+let airportOperationsRequest = null;
 const serverTrackedFlights = new Map();
 const untrackedFlights = new Set();
 const notificationDeliveryKeys = new Map();
@@ -769,6 +774,91 @@ app.get(["/api/flights/statistics", "/trip/api/flights/statistics"], async (requ
     });
   }
 });
+
+app.get(["/api/airport-delays", "/trip/api/airport-delays"], async (request, response) => {
+  const airportCodes = [...new Set(
+    String(request.query.airports ?? "")
+      .split(",")
+      .map((code) => code.trim().toUpperCase())
+      .filter(Boolean),
+  )];
+  if (airportCodes.length === 0 || airportCodes.length > 8 || airportCodes.some((code) => !/^[A-Z0-9]{3}$/.test(code))) {
+    response.status(400).json({ error: "Provide between one and eight valid three-character airport codes." });
+    return;
+  }
+
+  try {
+    const feed = await fetchFaaAirportOperations();
+    const payload = summarizeAirportOperations({
+      requestedCodes: airportCodes,
+      events: feed.events,
+      pacingAirports: feed.pacingAirports,
+      fetchedAt: feed.fetchedAt,
+    });
+    response.setHeader("Cache-Control", "no-store");
+    response.json({
+      ...payload,
+      stale: feed.stale,
+      airports: payload.airports.map((airport) => {
+        const catalogAirport = airportCatalog[airport.airportCode];
+        return {
+          ...airport,
+          airportName: catalogAirport?.name ?? airport.airportName,
+          city: catalogAirport?.city,
+          timeZone: catalogAirport?.timeZone,
+        };
+      }),
+    });
+  } catch (error) {
+    response.status(502).json({
+      error: "Current FAA airport status is temporarily unavailable.",
+      detail: error instanceof Error ? error.message : "FAA airport status lookup failed.",
+    });
+  }
+});
+
+async function fetchFaaAirportOperations() {
+  if (airportOperationsCache?.expiresAt > Date.now()) return airportOperationsCache;
+  if (airportOperationsRequest) return airportOperationsRequest;
+
+  const staleCache = airportOperationsCache;
+  airportOperationsRequest = (async () => {
+    try {
+      const requestOptions = {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "TripTracker/airport-status",
+        },
+        signal: AbortSignal.timeout(10000),
+      };
+      const [eventResponse, pacingResponse] = await Promise.all([
+        fetch(`${faaNasBaseUrl}/airport-events`, requestOptions),
+        fetch(`${faaNasBaseUrl}/pacing-airports`, requestOptions).catch(() => null),
+      ]);
+      if (!eventResponse.ok) throw new Error(`FAA airport-events feed returned ${eventResponse.status}.`);
+
+      const events = await eventResponse.json();
+      const pacingAirports = pacingResponse?.ok ? await pacingResponse.json() : [];
+      if (!Array.isArray(events)) throw new Error("FAA airport-events feed returned an unexpected response.");
+
+      airportOperationsCache = {
+        events,
+        pacingAirports: Array.isArray(pacingAirports) ? pacingAirports : [],
+        fetchedAt: new Date().toISOString(),
+        expiresAt: Date.now() + airportOperationsCacheMs,
+        stale: false,
+      };
+      return airportOperationsCache;
+    } catch (error) {
+      if (staleCache) return { ...staleCache, stale: true };
+      throw error;
+    } finally {
+      airportOperationsRequest = null;
+    }
+  })();
+
+  return airportOperationsRequest;
+}
 
 async function lookupFlightStatistics({ ident, airline, flightNumber, origin, destination, date, originTimeZone }) {
   const sourceUrl = `https://www.flightaware.com/live/flight/${encodeURIComponent(ident)}/history`;

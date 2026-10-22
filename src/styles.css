@@ -1510,6 +1510,272 @@ dt,
   font-weight: 850;
 }
 
+.airport-delay-panel {
+  background: #101722;
+  border: 1px solid #33485a;
+  border-radius: 8px;
+  box-shadow: inset 0 3px 0 #4ed9ff, 0 14px 34px rgba(0, 0, 0, 0.26);
+  color: var(--ink);
+  padding: 18px;
+}
+
+.airport-delay-heading {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.airport-delay-heading .section-heading {
+  color: var(--ink);
+}
+
+.airport-delay-heading .section-heading svg {
+  color: var(--cyan);
+}
+
+.airport-delay-heading > span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.76rem;
+  font-weight: 850;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.airport-delay-grid {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+  padding-top: 16px;
+}
+
+.airport-delay-card {
+  --airport-accent: var(--green);
+  background: #151e29;
+  border: 1px solid #344353;
+  border-radius: 7px;
+  box-shadow: inset 4px 0 0 var(--airport-accent);
+  min-width: 0;
+  padding: 15px 16px 14px 19px;
+}
+
+.airport-delay-card.severity-info {
+  --airport-accent: var(--cyan);
+}
+
+.airport-delay-card.severity-unknown {
+  --airport-accent: var(--muted);
+}
+
+.airport-delay-card.severity-minor {
+  --airport-accent: var(--amber);
+}
+
+.airport-delay-card.severity-major {
+  --airport-accent: #ff977a;
+}
+
+.airport-delay-card.severity-critical {
+  --airport-accent: var(--red);
+}
+
+.airport-delay-card > header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.airport-delay-card > header > div {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+}
+
+.airport-delay-card > header > div span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.airport-delay-card > header > div strong {
+  color: var(--airport-accent);
+  font-size: 1.4rem;
+}
+
+.airport-delay-status {
+  background: color-mix(in srgb, var(--airport-accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--airport-accent) 35%, transparent);
+  border-radius: 999px;
+  color: var(--airport-accent);
+  font-size: 0.68rem;
+  font-weight: 900;
+  max-width: 58%;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.airport-delay-card h3 {
+  color: #d7e2e8;
+  font-size: 0.88rem;
+  line-height: 1.3;
+  margin: 7px 0 13px;
+  overflow-wrap: anywhere;
+}
+
+.airport-clear-state {
+  align-items: center;
+  background: rgba(76, 226, 154, 0.07);
+  border: 1px solid rgba(76, 226, 154, 0.2);
+  border-radius: 6px;
+  display: flex;
+  gap: 11px;
+  padding: 12px;
+}
+
+.airport-clear-state > svg {
+  color: var(--green);
+  flex: 0 0 auto;
+}
+
+.airport-clear-state.limited {
+  background: rgba(154, 174, 187, 0.07);
+  border-color: rgba(154, 174, 187, 0.2);
+}
+
+.airport-clear-state.limited > svg {
+  color: var(--muted);
+}
+
+.airport-clear-state div {
+  display: grid;
+  gap: 2px;
+}
+
+.airport-clear-state strong {
+  font-size: 0.82rem;
+}
+
+.airport-clear-state span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.airport-event-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.airport-event-list li {
+  align-items: start;
+  border-bottom: 1px solid rgba(154, 174, 187, 0.15);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0 0 9px;
+}
+
+.airport-event-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.airport-event-list li > svg {
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+.airport-event-list li.severity-major > svg {
+  color: #ff977a;
+}
+
+.airport-event-list li.severity-critical > svg {
+  color: var(--red);
+}
+
+.airport-event-list li > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.airport-event-list strong {
+  font-size: 0.85rem;
+}
+
+.airport-event-list p {
+  color: #c7d3da;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.38;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.airport-event-list span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.airport-runway-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.airport-runway-facts span {
+  background: #1b2734;
+  border: 1px solid #364a5d;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 6px 8px;
+}
+
+.airport-runway-facts strong {
+  color: #e6eef2;
+  margin-left: 4px;
+}
+
+.airport-coverage-note,
+.airport-delay-source {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 12px 0 0;
+}
+
+.airport-coverage-note {
+  border-top: 1px solid rgba(154, 174, 187, 0.14);
+  padding-top: 9px;
+}
+
+.airport-delay-source a {
+  color: var(--cyan);
+  font-weight: 850;
+}
+
+.airport-delay-source > strong {
+  color: var(--amber);
+}
+
 .header-actions {
   align-items: center;
   display: flex;
@@ -2015,8 +2281,14 @@ dd {
   }
 
   .risk-overview,
-  .history-issues {
+  .history-issues,
+  .airport-delay-grid {
     grid-template-columns: 1fr;
+  }
+
+  .airport-delay-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .risk-verdict {
