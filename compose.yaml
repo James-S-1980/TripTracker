@@ -1,7 +1,7 @@
 services:
   triptracker:
     build: .
-    image: triptracker:0.5.0
+    image: triptracker:0.6.0
     container_name: triptracker
     restart: unless-stopped
     ports:

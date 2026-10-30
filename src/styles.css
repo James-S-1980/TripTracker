@@ -845,6 +845,30 @@ dt,
   background: var(--red);
 }
 
+.tracked-flight.timing-on-time .tracked-copy em {
+  color: var(--green);
+}
+
+.tracked-flight.timing-on-time .tracked-copy em::before {
+  background: var(--green);
+}
+
+.tracked-flight.timing-delayed .tracked-copy em,
+.tracked-flight.timing-cancelled .tracked-copy em {
+  color: #ff8d97;
+}
+
+.tracked-flight.timing-delayed .tracked-copy em::before,
+.tracked-flight.timing-cancelled .tracked-copy em::before {
+  background: var(--red);
+}
+
+.tracked-flight.timing-delayed.active,
+.tracked-flight.timing-cancelled.active {
+  border-color: rgba(255, 107, 118, 0.72);
+  box-shadow: inset 4px 0 0 var(--red), 0 10px 28px rgba(255, 107, 118, 0.12);
+}
+
 .tracked-route {
   align-items: center;
   color: #c1d0dc !important;
@@ -1054,6 +1078,40 @@ dt,
   color: #6ce8f4;
 }
 
+.status-banner.timing-on-time {
+  background: #103127;
+  color: var(--green);
+}
+
+.status-banner.timing-delayed,
+.status-banner.timing-cancelled {
+  background: #421b24;
+  color: #ff8d97;
+}
+
+.status-banner-copy {
+  display: grid;
+  gap: 2px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.status-banner-copy strong {
+  font-size: 1.08rem;
+  letter-spacing: 0;
+}
+
+.status-banner-copy small {
+  color: #d7e3e8;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.status-banner.timing-delayed span,
+.status-banner.timing-cancelled span {
+  color: #ffd5d9;
+}
+
 .route-times {
   display: grid;
   gap: 12px;
@@ -1066,22 +1124,78 @@ dt,
   font-weight: 900;
 }
 
-.airport-stop strong {
-  color: var(--cyan);
-  display: block;
-  font-size: 2.65rem;
-  line-height: 1;
-  margin-top: 5px;
-}
-
-.airport-stop:last-child strong {
-  color: var(--green);
-}
-
 .airport-stop span {
   display: block;
   font-weight: 800;
   margin-top: 4px;
+}
+
+.flight-time-display {
+  margin-top: 7px;
+  min-width: 0;
+}
+
+.current-flight-time {
+  color: var(--green);
+  display: block;
+  font-size: 2.35rem;
+  font-weight: 900;
+  line-height: 1.04;
+  overflow-wrap: anywhere;
+}
+
+.flight-time-display.delayed .current-flight-time {
+  color: #ff7c88;
+}
+
+.time-change-row {
+  align-items: baseline;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 66px minmax(0, 1fr);
+}
+
+.airport-stop .time-change-row span {
+  color: #8fa2ae;
+  font-size: 0.72rem;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.time-change-row.original del {
+  color: #aab8c1;
+  font-size: 1rem;
+  font-weight: 800;
+  text-decoration-color: #ff7c88;
+  text-decoration-thickness: 2px;
+}
+
+.time-change-row.updated {
+  margin-top: 4px;
+}
+
+.time-change-row.updated time {
+  color: #ff7c88;
+  font-size: 2.35rem;
+  font-weight: 900;
+  line-height: 1.04;
+  overflow-wrap: anywhere;
+}
+
+.delay-amount {
+  border-left: 3px solid var(--red);
+  color: #ffb4bb;
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 8px;
+  padding-left: 9px;
+  text-transform: uppercase;
+}
+
+.airport-stop .your-time {
+  color: #b8c6ce;
+  font-size: 0.86rem;
+  margin-top: 6px;
 }
 
 .route-progress {
@@ -2275,8 +2389,7 @@ dd {
     padding: 10px;
   }
 
-  .flight-card-top,
-  .status-banner {
+  .flight-card-top {
     align-items: start;
   }
 
@@ -2310,14 +2423,18 @@ dd {
     border-bottom: 1px solid var(--line);
   }
 
-  .airport-stop strong {
-    font-size: 2.15rem;
+  .current-flight-time,
+  .time-change-row.updated time {
+    font-size: 2rem;
   }
 
   .flight-card-top,
-  .status-banner,
   .gate-row {
     flex-direction: column;
+  }
+
+  .status-banner {
+    align-items: center;
   }
 
   .gate-row,

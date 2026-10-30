@@ -3,6 +3,8 @@ import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
 import { fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { flightTiming, timingLabel } from "./flightTiming";
+import type { TimeComparison } from "./flightTiming";
 import { fetchWeather } from "./weather";
 import type { AirportDelayEvent, AirportDelayReport, AirportDelayStatus, AirportRunway, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -113,9 +115,46 @@ function statusLead(flight: FlightLeg): string {
   if (flight.status === "Arrived") return `Arrived ${durationText(now - arrival)} ago`;
   if (flight.status === "En Route") return `Arriving in ${durationText(arrival - now)}`;
   if (flight.status === "Boarding") return `Departs in ${durationText(departure - now)}`;
-  if (flight.status === "Delayed") return `Delayed departure ${formatTime(flight.departureTime)}`;
+  if (flight.status === "Delayed") return `Updated departure ${formatTime(flight.departureTime)}`;
   if (flight.status === "Cancelled") return "Flight cancelled";
   return `Departs in ${durationText(departure - now)}`;
+}
+
+function FlightTimeDisplay({
+  comparison,
+  timeZone,
+  forceDelayTone = false,
+}: {
+  comparison: TimeComparison;
+  timeZone: string;
+  forceDelayTone?: boolean;
+}) {
+  const isDelayed = comparison.isDelayed || forceDelayTone;
+  const showComparison = isDelayed && comparison.scheduledTime && comparison.deltaMinutes !== null && comparison.deltaMinutes > 0;
+  return (
+    <>
+      <div className={`flight-time-display ${isDelayed ? "delayed" : "on-time"}`}>
+        {showComparison ? (
+          <>
+            <div className="time-change-row original">
+              <span>Original</span>
+              <del>{formatZonedTime(comparison.scheduledTime!, timeZone)}</del>
+            </div>
+            <div className="time-change-row updated">
+              <span>Updated</span>
+              <time dateTime={comparison.currentTime}>{formatZonedTime(comparison.currentTime, timeZone)}</time>
+            </div>
+            <b className="delay-amount">+{comparison.deltaMinutes} min</b>
+          </>
+        ) : (
+          <time className="current-flight-time" dateTime={comparison.currentTime}>
+            {formatZonedTime(comparison.currentTime, timeZone)}
+          </time>
+        )}
+      </div>
+      <span className="your-time">Your time: {formatZonedTime(comparison.currentTime, "America/New_York")}</span>
+    </>
+  );
 }
 
 function usefulAirportValue(value: string | undefined): string {
@@ -180,6 +219,9 @@ function mergeKnownFlightEnrichment(previous: FlightLeg | undefined, next: Fligh
   const previousTail = previous.tailNumber ?? previous.aircraftPosition?.tailNumber;
   const nextTail = next.tailNumber ?? next.aircraftPosition?.tailNumber;
   const merged: FlightLeg = { ...next };
+
+  merged.scheduledDepartureTime = next.scheduledDepartureTime ?? previous.scheduledDepartureTime;
+  merged.scheduledArrivalTime = next.scheduledArrivalTime ?? previous.scheduledArrivalTime;
 
   if (!nextTail && previousTail) {
     merged.tailNumber = previousTail;
@@ -481,6 +523,10 @@ export function App() {
   const deletedFlightKeysRef = useRef<Set<string>>(new Set());
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
+  const activeTiming = activeFlight ? flightTiming(activeFlight) : null;
+  const activeDelayHasNoTimeChange = activeTiming?.state === "delayed"
+    && !activeTiming.departure.isDelayed
+    && !activeTiming.arrival.isDelayed;
   const activeStatisticsKey = activeFlight ? flightIdentityKey(activeFlight) : "";
   const activeAirportDelayKey = activeFlight ? `${activeFlight.origin.code}:${activeFlight.destination.code}` : "";
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
@@ -883,29 +929,32 @@ export function App() {
             <h2>Tracked Flights</h2>
           </div>
           <div className="tracked-list">
-            {flights.map((flight) => (
-              <div className={`tracked-flight status-${flight.status.toLowerCase().replace(/\s+/g, "-")} ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
-                <button onClick={() => setActiveId(flight.id)} type="button">
-                  <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
-                  <span className="tracked-copy">
-                    <strong>{flight.flightNumber}</strong>
-                    <span className="tracked-route">{flight.origin.code}<ArrowRight size={13} />{flight.destination.code}</span>
-                    <em>{flight.status}</em>
-                  </span>
-                </button>
-                <button
-                  aria-label={`Delete ${flight.flightNumber}`}
-                  className="delete-flight"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void deleteFlight(flight.id);
-                  }}
-                  type="button"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            ))}
+            {flights.map((flight) => {
+              const timing = flightTiming(flight);
+              return (
+                <div className={`tracked-flight timing-${timing.state} status-${flight.status.toLowerCase().replace(/\s+/g, "-")} ${flight.id === activeFlight?.id ? "active" : ""}`} key={flight.id}>
+                  <button onClick={() => setActiveId(flight.id)} type="button">
+                    <AirlineLogo code={flight.airlineCode ?? splitFlightDesignator(flight.flightNumber)[0]} logoUrl={flight.airlineLogoUrl} size="small" />
+                    <span className="tracked-copy">
+                      <strong>{flight.flightNumber}</strong>
+                      <span className="tracked-route">{flight.origin.code}<ArrowRight size={13} />{flight.destination.code}</span>
+                      <em>{timingLabel(timing)} · {flight.status}</em>
+                    </span>
+                  </button>
+                  <button
+                    aria-label={`Delete ${flight.flightNumber}`}
+                    className="delete-flight"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void deleteFlight(flight.id);
+                    }}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -1083,16 +1132,22 @@ export function App() {
                     </button>
                   </div>
 
-                  <div className={`status-banner ${activeFlight.status.toLowerCase().replace(/\s+/g, "-")}`}>
-                    <strong>{statusLead(activeFlight)}</strong>
+                  <div className={`status-banner timing-${activeTiming?.state ?? "on-time"} ${activeFlight.status.toLowerCase().replace(/\s+/g, "-")}`}>
+                    <div className="status-banner-copy">
+                      <strong>{activeTiming ? timingLabel(activeTiming) : activeFlight.status}</strong>
+                      <small>{statusLead(activeFlight)}</small>
+                    </div>
                     <span>{activeFlight.status}</span>
                   </div>
 
                   <div className="route-times">
                     <div className="airport-stop">
                       <small>{activeFlight.origin.code} / {activeFlight.origin.name}</small>
-                      <strong>{formatZonedTime(activeFlight.departureTime, activeFlight.origin.timeZone ?? "America/New_York")}</strong>
-                      <span>Your time: {formatZonedTime(activeFlight.departureTime, "America/New_York")}</span>
+                      <FlightTimeDisplay
+                        comparison={activeTiming!.departure}
+                        forceDelayTone={activeDelayHasNoTimeChange}
+                        timeZone={activeFlight.origin.timeZone ?? "America/New_York"}
+                      />
                       <em>{activeFlight.origin.city}</em>
                     </div>
 
@@ -1111,8 +1166,11 @@ export function App() {
 
                     <div className="airport-stop">
                       <small>{activeFlight.destination.code} / {activeFlight.destination.name}</small>
-                      <strong>{formatZonedTime(activeFlight.arrivalTime, activeFlight.destination.timeZone ?? "America/New_York")}</strong>
-                      <span>Your time: {formatZonedTime(activeFlight.arrivalTime, "America/New_York")}</span>
+                      <FlightTimeDisplay
+                        comparison={activeTiming!.arrival}
+                        forceDelayTone={activeDelayHasNoTimeChange}
+                        timeZone={activeFlight.destination.timeZone ?? "America/New_York"}
+                      />
                       <em>{activeFlight.destination.city}</em>
                     </div>
                   </div>

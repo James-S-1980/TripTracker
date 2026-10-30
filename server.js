@@ -174,6 +174,8 @@ function mapFlightAwareFlight(flight, requestedDate) {
     throw new Error("FlightAware response did not include origin and destination airports.");
   }
 
+  const scheduledDepartureTime = flight.scheduled_out ?? flight.scheduled_off;
+  const scheduledArrivalTime = flight.scheduled_in ?? flight.scheduled_on;
   const departureTime = flight.actual_out ?? flight.estimated_out ?? flight.scheduled_out ?? flight.actual_off ?? flight.estimated_off ?? flight.scheduled_off;
   const arrivalTime = flight.actual_in ?? flight.estimated_in ?? flight.scheduled_in ?? flight.actual_on ?? flight.estimated_on ?? flight.scheduled_on;
   if (!departureTime || !arrivalTime) {
@@ -220,6 +222,8 @@ function mapFlightAwareFlight(flight, requestedDate) {
     destination,
     departureTime,
     arrivalTime,
+    scheduledDepartureTime,
+    scheduledArrivalTime,
     boardingGate: usefulAirportValue(flight.gate_origin),
     arrivalGate: usefulAirportValue(flight.gate_destination),
     terminal: usefulAirportValue(flight.terminal_origin),
@@ -1320,6 +1324,9 @@ function mergeKnownFlightEnrichment(previous, next) {
   const nextTail = usefulOptionalValue(next.tailNumber) || usefulOptionalValue(next.aircraftPosition?.tailNumber);
   const merged = { ...next };
 
+  merged.scheduledDepartureTime = next.scheduledDepartureTime ?? previous.scheduledDepartureTime;
+  merged.scheduledArrivalTime = next.scheduledArrivalTime ?? previous.scheduledArrivalTime;
+
   if (!nextTail && previousTail) {
     merged.tailNumber = previousTail;
     if (merged.aircraftPosition) {
@@ -1902,12 +1909,16 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
   const destination = airportFromPublicFlightAware(publicFlight.destination);
   if (!origin || !destination) return null;
 
-  const departureEpoch = publicTimeValue(publicFlight.takeoffTimes) ?? publicTimeValue(publicFlight.gateDepartureTimes);
-  const arrivalEpoch = publicTimeValue(publicFlight.landingTimes) ?? publicTimeValue(publicFlight.gateArrivalTimes);
+  const departureTimes = publicTimeValue(publicFlight.takeoffTimes) ? publicFlight.takeoffTimes : publicFlight.gateDepartureTimes;
+  const arrivalTimes = publicTimeValue(publicFlight.landingTimes) ? publicFlight.landingTimes : publicFlight.gateArrivalTimes;
+  const departureEpoch = publicTimeValue(departureTimes);
+  const arrivalEpoch = publicTimeValue(arrivalTimes);
   if (!departureEpoch || !arrivalEpoch || !publicFlightMatchesDepartureDate(departureEpoch, date, origin.timeZone)) return null;
 
   const departureTime = new Date(departureEpoch * 1000).toISOString();
   const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
+  const scheduledDepartureEpoch = publicScheduledTimeValue(departureTimes);
+  const scheduledArrivalEpoch = publicScheduledTimeValue(arrivalTimes);
   const status = inboundStatusFromPublicFlight(publicFlight);
   const track = publicFlightTrack(publicFlight);
   const position = publicTrackPositionWithTelemetry(track) ?? estimatedPosition(origin, destination, status, departureTime, arrivalTime);
@@ -1924,6 +1935,8 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
     destination,
     departureTime,
     arrivalTime,
+    scheduledDepartureTime: scheduledDepartureEpoch ? new Date(scheduledDepartureEpoch * 1000).toISOString() : undefined,
+    scheduledArrivalTime: scheduledArrivalEpoch ? new Date(scheduledArrivalEpoch * 1000).toISOString() : undefined,
     boardingGate: usefulAirportValue(publicFlight.origin?.gate),
     arrivalGate: usefulAirportValue(publicFlight.destination?.gate),
     terminal: usefulAirportValue(publicFlight.origin?.terminal),
@@ -2052,6 +2065,11 @@ function publicTimeValue(times) {
   if (Number.isFinite(estimated) && estimated > 0) return estimated;
   if (Number.isFinite(scheduled) && scheduled > 0) return scheduled;
   return null;
+}
+
+function publicScheduledTimeValue(times) {
+  const scheduled = Number(times?.scheduled);
+  return Number.isFinite(scheduled) && scheduled > 0 ? scheduled : null;
 }
 
 function publicFlightMatchesDepartureDate(departureEpoch, date, originTimeZone) {
@@ -2361,6 +2379,8 @@ function parseFlightStatsSegmentCandidates(html, ident, airline, flightNumber, d
       destination,
       departureTime: times.departureTime,
       arrivalTime: times.arrivalTime,
+      scheduledDepartureTime: times.departureTime,
+      scheduledArrivalTime: times.arrivalTime,
       boardingGate: "TBD",
       arrivalGate: "TBD",
       terminal: "TBD",
@@ -2423,6 +2443,8 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     text.match(/Flight Arrival Times.*?Actual\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Estimated\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1] ??
     text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
+  const scheduledDepartureTimeText = text.match(/Flight Departure Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
+  const scheduledArrivalTimeText = text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9/]+)/gi)];
   const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
 
@@ -2434,6 +2456,12 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     wallTimeToUtcIso(date, departureTimeText, origin.timeZone),
     wallTimeToUtcIso(date, arrivalTimeText, destination.timeZone),
   );
+  const scheduledTimes = scheduledDepartureTimeText && scheduledArrivalTimeText
+    ? normalizeFlightTimeRange(
+      wallTimeToUtcIso(date, scheduledDepartureTimeText, origin.timeZone),
+      wallTimeToUtcIso(date, scheduledArrivalTimeText, destination.timeZone),
+    )
+    : null;
   const altitudeText = text.match(/ALTITUDE\s+(\d+)\s*ft/i)?.[1];
   const speedText = text.match(/Speed\s+(\d+)\s+kts/i)?.[1];
   const altitudeFt = Number(altitudeText ?? 0);
@@ -2450,6 +2478,8 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     destination,
     departureTime: times.departureTime,
     arrivalTime: times.arrivalTime,
+    scheduledDepartureTime: scheduledTimes?.departureTime,
+    scheduledArrivalTime: scheduledTimes?.arrivalTime,
     boardingGate: usefulAirportValue(gates[0]?.[2]),
     arrivalGate: usefulAirportValue(gates[1]?.[2]),
     terminal: usefulAirportValue(gates[0]?.[1]),

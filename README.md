@@ -137,6 +137,10 @@ Public web fallback pages usually expose altitude, speed, gates, and times but n
 
 The route map uses OpenStreetMap's standard raster tiles, which do not require an API key. The weather radar remains a separate RainViewer overlay. OpenStreetMap attribution is displayed on the map, and the app requests tiles only as users navigate the interactive map.
 
+## Delay display
+
+TripTracker preserves the original scheduled departure and arrival times when a provider supplies them. The active flight card and tracked-flight selector show on-time flights in green and delayed or cancelled flights in red. A time at least five minutes later than its original schedule is treated as a visible delay; the affected departure or arrival displays both the struck-through original time, the updated time, and the exact minute difference. Provider-reported delays remain red even when the source does not expose a scheduled baseline.
+
 ## Email notifications
 
 TripTracker sends an initial email when tracking starts, then limits email to operationally important changes. Critical email includes a delay or cancellation, a departure or arrival gate assignment/change, and a cumulative departure or arrival time movement of at least 10 minutes. Tail-number, inbound-aircraft, position, altitude, speed, and other routine enrichment changes remain visible in the app without generating email.
