@@ -167,6 +167,15 @@ function usefulOptionalValue(value) {
   return normalized === "TBD" ? undefined : normalized;
 }
 
+function optionalIsoTimestamp(value) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const numeric = Number(value);
+  const timestamp = Number.isFinite(numeric)
+    ? numeric * (numeric < 1e12 ? 1000 : 1)
+    : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
 function mapFlightAwareFlight(flight, requestedDate) {
   const origin = normalizeAirport(flight.origin);
   const destination = normalizeAirport(flight.destination);
@@ -176,6 +185,9 @@ function mapFlightAwareFlight(flight, requestedDate) {
 
   const scheduledDepartureTime = flight.scheduled_out ?? flight.scheduled_off;
   const scheduledArrivalTime = flight.scheduled_in ?? flight.scheduled_on;
+  const boardingTime = optionalIsoTimestamp(
+    flight.boarding_time ?? flight.scheduled_boarding_time ?? flight.boardingTime ?? flight.scheduled_boarding,
+  );
   const departureTime = flight.actual_out ?? flight.estimated_out ?? flight.scheduled_out ?? flight.actual_off ?? flight.estimated_off ?? flight.scheduled_off;
   const arrivalTime = flight.actual_in ?? flight.estimated_in ?? flight.scheduled_in ?? flight.actual_on ?? flight.estimated_on ?? flight.scheduled_on;
   if (!departureTime || !arrivalTime) {
@@ -224,6 +236,7 @@ function mapFlightAwareFlight(flight, requestedDate) {
     arrivalTime,
     scheduledDepartureTime,
     scheduledArrivalTime,
+    boardingTime,
     boardingGate: usefulAirportValue(flight.gate_origin),
     arrivalGate: usefulAirportValue(flight.gate_destination),
     terminal: usefulAirportValue(flight.terminal_origin),
@@ -1326,6 +1339,7 @@ function mergeKnownFlightEnrichment(previous, next) {
 
   merged.scheduledDepartureTime = next.scheduledDepartureTime ?? previous.scheduledDepartureTime;
   merged.scheduledArrivalTime = next.scheduledArrivalTime ?? previous.scheduledArrivalTime;
+  merged.boardingTime = next.boardingTime ?? previous.boardingTime;
 
   if (!nextTail && previousTail) {
     merged.tailNumber = previousTail;
@@ -1919,6 +1933,7 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
   const arrivalTime = new Date(arrivalEpoch * 1000).toISOString();
   const scheduledDepartureEpoch = publicScheduledTimeValue(departureTimes);
   const scheduledArrivalEpoch = publicScheduledTimeValue(arrivalTimes);
+  const boardingEpoch = publicTimeValue(publicFlight.boardingTimes);
   const status = inboundStatusFromPublicFlight(publicFlight);
   const track = publicFlightTrack(publicFlight);
   const position = publicTrackPositionWithTelemetry(track) ?? estimatedPosition(origin, destination, status, departureTime, arrivalTime);
@@ -1937,6 +1952,9 @@ async function lookupFlightAwarePublic(ident, airline, flightNumber, date) {
     arrivalTime,
     scheduledDepartureTime: scheduledDepartureEpoch ? new Date(scheduledDepartureEpoch * 1000).toISOString() : undefined,
     scheduledArrivalTime: scheduledArrivalEpoch ? new Date(scheduledArrivalEpoch * 1000).toISOString() : undefined,
+    boardingTime: boardingEpoch
+      ? new Date(boardingEpoch * 1000).toISOString()
+      : optionalIsoTimestamp(publicFlight.boardingTime ?? publicFlight.boarding_time),
     boardingGate: usefulAirportValue(publicFlight.origin?.gate),
     arrivalGate: usefulAirportValue(publicFlight.destination?.gate),
     terminal: usefulAirportValue(publicFlight.origin?.terminal),
@@ -2445,6 +2463,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const scheduledDepartureTimeText = text.match(/Flight Departure Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const scheduledArrivalTimeText = text.match(/Flight Arrival Times.*?Scheduled\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
+  const boardingTimeText = text.match(/(?:Scheduled\s+)?Boarding(?:\s+(?:Start|Time))?\s+(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i)?.[1];
   const gates = [...text.matchAll(/Terminal\s+([A-Z0-9/]+)\s+Gate\s+([A-Z0-9/]+)/gi)];
   const flightTime = text.match(/Flight Time Total\s+([^ ]+\s+[^ ]+)/i)?.[1];
 
@@ -2480,6 +2499,7 @@ function parseFlightStatsPage(html, ident, airline, flightNumber, date, sourceUr
     arrivalTime: times.arrivalTime,
     scheduledDepartureTime: scheduledTimes?.departureTime,
     scheduledArrivalTime: scheduledTimes?.arrivalTime,
+    boardingTime: boardingTimeText ? wallTimeToUtcIso(date, boardingTimeText, origin.timeZone) : undefined,
     boardingGate: usefulAirportValue(gates[0]?.[2]),
     arrivalGate: usefulAirportValue(gates[1]?.[2]),
     terminal: usefulAirportValue(gates[0]?.[1]),

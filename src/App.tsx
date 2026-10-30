@@ -2,6 +2,8 @@ import { Activity, AlertTriangle, ArrowRight, BarChart3, Bell, CalendarDays, Che
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
+import { boardingEstimate } from "./boarding";
+import type { BoardingEstimate } from "./boarding";
 import { fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { flightTiming, timingLabel } from "./flightTiming";
 import type { TimeComparison } from "./flightTiming";
@@ -157,6 +159,79 @@ function FlightTimeDisplay({
   );
 }
 
+function boardingCountdownText(ms: number): string {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+}
+
+function BoardingCountdown({
+  estimate,
+  flight,
+  now,
+}: {
+  estimate: BoardingEstimate;
+  flight: FlightLeg;
+  now: number;
+}) {
+  if (!["Scheduled", "Delayed", "Boarding"].includes(flight.status)) return null;
+
+  const boardingAt = estimate.time ? new Date(estimate.time).getTime() : Number.NaN;
+  const remaining = boardingAt - now;
+  const hasTime = Number.isFinite(boardingAt);
+  const isBoarding = flight.status === "Boarding";
+  const timeReached = hasTime && remaining <= 0;
+  const isGateReminder = estimate.policy?.basis === "gate-ready";
+  let headline = "Boarding time unavailable";
+  if (isBoarding) {
+    headline = "Boarding now";
+  } else if (timeReached) {
+    headline = isGateReminder
+      ? "Gate-ready time reached"
+      : estimate.kind === "policy" ? "Boarding expected now" : "Boarding time reached";
+  } else if (hasTime) {
+    headline = `${isGateReminder ? "Be at gate" : "Boarding starts"} in ${boardingCountdownText(remaining)}`;
+  }
+
+  let tone = "upcoming";
+  if (isBoarding || timeReached) tone = "active";
+  else if (!hasTime) tone = "unavailable";
+  else if (remaining <= 60 * 60000) tone = "soon";
+  const sourceLabel = estimate.kind === "exact"
+    ? "Published boarding time"
+    : estimate.policy
+      ? isGateReminder ? "Airline gate policy" : "Airline policy estimate"
+      : "Check airline app";
+
+  return (
+    <section className={`boarding-strip ${tone}`}>
+      <span className="boarding-strip-icon"><Timer size={20} /></span>
+      <div className="boarding-strip-time">
+        <small>Boarding countdown</small>
+        <strong>{headline}</strong>
+        {estimate.time && (
+          <time dateTime={estimate.time}>{formatZonedTime(estimate.time, flight.origin.timeZone ?? "America/New_York")}</time>
+        )}
+      </div>
+      <div className="boarding-strip-source">
+        <span>{sourceLabel}</span>
+        {estimate.policy ? (
+          <>
+            <a href={estimate.policy.sourceUrl} target="_blank" rel="noreferrer">{estimate.policy.airline} policy</a>
+            <small>{estimate.policy.detail}</small>
+          </>
+        ) : estimate.kind === "exact" ? (
+          <small>Provided by {flight.dataSource}.</small>
+        ) : (
+          <small>No exact time or published boarding-start rule is available for this carrier.</small>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function usefulAirportValue(value: string | undefined): string {
   const normalized = String(value ?? "").trim();
   return normalized && !/^(?:n\/?a|na|none|null|unknown|tbd|-|--|\?)$/i.test(normalized) ? normalized : "";
@@ -222,6 +297,7 @@ function mergeKnownFlightEnrichment(previous: FlightLeg | undefined, next: Fligh
 
   merged.scheduledDepartureTime = next.scheduledDepartureTime ?? previous.scheduledDepartureTime;
   merged.scheduledArrivalTime = next.scheduledArrivalTime ?? previous.scheduledArrivalTime;
+  merged.boardingTime = next.boardingTime ?? previous.boardingTime;
 
   if (!nextTail && previousTail) {
     merged.tailNumber = previousTail;
@@ -518,12 +594,14 @@ export function App() {
   const [airportDelays, setAirportDelays] = useState<AirportDelayReport | null>(null);
   const [airportDelaysError, setAirportDelaysError] = useState<string | null>(null);
   const [isLoadingAirportDelays, setIsLoadingAirportDelays] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
   const deletedFlightKeysRef = useRef<Set<string>>(new Set());
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
   const activeTiming = activeFlight ? flightTiming(activeFlight) : null;
+  const activeBoarding = activeFlight ? boardingEstimate(activeFlight) : null;
   const activeDelayHasNoTimeChange = activeTiming?.state === "delayed"
     && !activeTiming.departure.isDelayed
     && !activeTiming.arrival.isDelayed;
@@ -553,6 +631,11 @@ export function App() {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
     void registerTrackedFlights(flights);
   }, [flights]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setClockNow(Date.now()), 15 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     if (!hasLiveSearchInput) {
@@ -1139,6 +1222,10 @@ export function App() {
                     </div>
                     <span>{activeFlight.status}</span>
                   </div>
+
+                  {activeBoarding && (
+                    <BoardingCountdown estimate={activeBoarding} flight={activeFlight} now={clockNow} />
+                  )}
 
                   <div className="route-times">
                     <div className="airport-stop">

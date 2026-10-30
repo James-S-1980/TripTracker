@@ -22,6 +22,7 @@ export type FlightLeg = {
   arrivalTime: string;
   scheduledDepartureTime?: string;
   scheduledArrivalTime?: string;
+  boardingTime?: string;
   boardingGate: string;
   arrivalGate: string;
   terminal: string;
