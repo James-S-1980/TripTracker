@@ -1,6 +1,18 @@
 import { resolveAirline } from "./airlines";
 import type { AirportDelayReport, FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
 
+export type FlightNotificationResult = {
+  ok: boolean;
+  concluded?: boolean;
+  deferred?: boolean;
+  suppressed?: boolean;
+};
+
+export type TrackedFlightsSnapshot = {
+  flights: FlightLeg[];
+  untrackedFlightKeys: string[];
+};
+
 function apiBase(): string {
   return window.location.pathname.startsWith("/trip") ? "/trip/api" : "/api";
 }
@@ -70,7 +82,7 @@ export async function fetchAirportDelays(airportCodes: string[], signal?: AbortS
   return await response.json() as AirportDelayReport;
 }
 
-export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<void> {
+export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<FlightNotificationResult> {
   const response = await fetch(`${apiBase()}/notifications/flight-event`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -78,8 +90,9 @@ export async function sendFlightNotification(eventType: "tracked" | "updated" | 
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
-    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? `Text notification failed with HTTP ${response.status}.`);
+    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? `Email notification failed with HTTP ${response.status}.`);
   }
+  return await response.json() as FlightNotificationResult;
 }
 
 export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void> {
@@ -91,11 +104,14 @@ export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void
   }).catch(() => undefined);
 }
 
-export async function fetchTrackedFlights(): Promise<FlightLeg[]> {
+export async function fetchTrackedFlights(): Promise<TrackedFlightsSnapshot> {
   const response = await fetch(`${apiBase()}/tracked-flights`);
-  if (!response.ok) return [];
-  const payload = await response.json().catch(() => null) as { flights?: FlightLeg[] } | null;
-  return Array.isArray(payload?.flights) ? payload.flights : [];
+  if (!response.ok) return { flights: [], untrackedFlightKeys: [] };
+  const payload = await response.json().catch(() => null) as { flights?: FlightLeg[]; untrackedFlightKeys?: string[] } | null;
+  return {
+    flights: Array.isArray(payload?.flights) ? payload.flights : [],
+    untrackedFlightKeys: Array.isArray(payload?.untrackedFlightKeys) ? payload.untrackedFlightKeys : [],
+  };
 }
 
 export async function untrackFlight(flight: FlightLeg): Promise<void> {

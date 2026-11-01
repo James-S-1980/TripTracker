@@ -972,11 +972,11 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
     }
 
     if (eventType !== "tracked" && untrackedFlights.has(trackedFlightKey(flight))) {
-      response.json({ ok: true, suppressed: true });
+      response.json({ ok: true, suppressed: true, concluded: eventType === "concluded" });
       return;
     }
 
-    if (!smsAppPassword) {
+    if (!smsAppPassword && eventType !== "concluded") {
       response.status(503).json({ error: "Email notifications are not configured on the server." });
       return;
     }
@@ -1012,12 +1012,13 @@ app.post(["/api/notifications/flight-event", "/trip/api/notifications/flight-eve
 
 async function handleConcludedNotificationRequest(flight, changes = []) {
   const key = trackedFlightKey(flight);
-  if (untrackedFlights.has(key)) return { ok: true, suppressed: true };
+  if (untrackedFlights.has(key)) return { ok: true, suppressed: true, concluded: true };
   const record = serverTrackedFlights.get(key);
   const displayFlight = landedDisplayFlight(flight, record?.flight);
   const result = await queueTrackedFlightObservation(displayFlight);
+  const latestFlight = serverTrackedFlights.get(key)?.flight ?? displayFlight;
 
-  if (displayFlight.status === "Landed" && !shouldConcludeLandedFlight(displayFlight)) {
+  if (latestFlight.status === "Landed" && !shouldConcludeLandedFlight(latestFlight)) {
     return {
       ok: true,
       deferred: true,
@@ -1027,9 +1028,10 @@ async function handleConcludedNotificationRequest(flight, changes = []) {
     };
   }
 
-  serverTrackedFlights.delete(key);
-  saveServerTrackedFlights();
-  return { ok: true, concluded: true, suppressed: true, serverTrackedFlights: serverTrackedFlights.size };
+  return {
+    ...result,
+    ...await queueTrackedFlightConclusion(latestFlight, changes),
+  };
 }
 
 app.post(["/api/notifications/register-tracked", "/trip/api/notifications/register-tracked"], (request, response) => {
@@ -1039,19 +1041,19 @@ app.post(["/api/notifications/register-tracked", "/trip/api/notifications/regist
   for (const flight of flights) {
     if (!flight?.flightNumber || !flight?.origin?.code || !flight?.destination?.code || flight.status === "Arrived") continue;
     if (!lookupArgsFromFlight(flight)) continue;
-    registerServerTrackedFlight(flight, { persist: false, preserveExisting: true });
-    registered += 1;
+    if (registerServerTrackedFlight(flight, { persist: false, preserveExisting: true })) registered += 1;
   }
 
   if (registered > 0) saveServerTrackedFlights();
   response.json({ ok: true, registered, serverTrackedFlights: serverTrackedFlights.size });
 });
 
-app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], (request, response) => {
-  pruneConcludedServerTrackedFlights();
+app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], async (request, response) => {
+  await concludeExpiredServerTrackedFlights();
   response.json({
     flights: serverTrackedFlightList(),
     serverTrackedFlights: serverTrackedFlights.size,
+    untrackedFlightKeys: [...untrackedFlights],
   });
 });
 
@@ -1220,15 +1222,67 @@ function registerServerTrackedFlight(flight, options = {}) {
 
 function queueTrackedFlightObservation(flight) {
   const key = trackedFlightKey(flight);
+  return queueTrackedFlightWork(key, () => processTrackedFlightObservation(flight));
+}
+
+function queueTrackedFlightConclusion(flight, changes = []) {
+  const key = trackedFlightKey(flight);
+  return queueTrackedFlightWork(key, () => concludeTrackedFlight(key, flight, changes));
+}
+
+function queueTrackedFlightWork(key, task) {
   const previousWork = trackedObservationQueues.get(key) ?? Promise.resolve();
   const work = previousWork
     .catch(() => undefined)
-    .then(() => processTrackedFlightObservation(flight));
+    .then(task);
   trackedObservationQueues.set(key, work);
   void work.finally(() => {
     if (trackedObservationQueues.get(key) === work) trackedObservationQueues.delete(key);
   }).catch(() => undefined);
   return work;
+}
+
+async function concludeTrackedFlight(key, flight, changes = []) {
+  if (untrackedFlights.has(key)) {
+    const removed = serverTrackedFlights.delete(key);
+    if (removed) saveServerTrackedFlights();
+    return { ok: true, concluded: true, suppressed: true, serverTrackedFlights: serverTrackedFlights.size };
+  }
+
+  const record = serverTrackedFlights.get(key);
+  const displayFlight = landedDisplayFlight(record?.flight ?? flight, record?.flight);
+  if (displayFlight.status !== "Landed" || !shouldConcludeLandedFlight(displayFlight)) {
+    return {
+      ok: true,
+      deferred: true,
+      reason: "Flight has not completed its 10-minute landed display window.",
+      serverTrackedFlights: serverTrackedFlights.size,
+    };
+  }
+
+  const conclusionChanges = changes.length > 0
+    ? changes
+    : ["The 10-minute landed display period is complete; tracking has ended."];
+  const notificationSent = smsAppPassword
+    ? await dispatchTextNotification("concluded", displayFlight, conclusionChanges)
+    : false;
+
+  untrackedFlights.add(key);
+  try {
+    saveUntrackedFlights();
+  } catch (error) {
+    untrackedFlights.delete(key);
+    throw error;
+  }
+
+  const removed = serverTrackedFlights.delete(key);
+  if (removed) saveServerTrackedFlights();
+  return {
+    ok: true,
+    concluded: true,
+    notificationSent,
+    serverTrackedFlights: serverTrackedFlights.size,
+  };
 }
 
 async function processTrackedFlightObservation(flight) {
@@ -1284,25 +1338,28 @@ function serverTrackedFlightList() {
     .sort((a, b) => new Date(b.lastUpdated ?? b.departureTime ?? 0).getTime() - new Date(a.lastUpdated ?? a.departureTime ?? 0).getTime());
 }
 
-function pruneConcludedServerTrackedFlights() {
-  let changed = false;
+async function concludeExpiredServerTrackedFlights() {
   for (const [key, record] of [...serverTrackedFlights.entries()]) {
     if (shouldConcludeLandedFlight(record.flight)) {
-      serverTrackedFlights.delete(key);
-      changed = true;
+      await queueTrackedFlightConclusion(record.flight).catch((error) => {
+        serverTrackedFlights.set(key, {
+          ...record,
+          lastCheckedAt: new Date().toISOString(),
+          lastError: error instanceof Error ? error.message : "Flight conclusion failed.",
+        });
+        saveServerTrackedFlights();
+      });
     }
   }
-  if (changed) saveServerTrackedFlights();
 }
 
 async function pollServerTrackedFlights() {
-  if (!smsAppPassword || serverTrackedFlights.size === 0) return;
+  if (serverTrackedFlights.size === 0) return;
 
   for (const [key, record] of [...serverTrackedFlights.entries()]) {
     try {
       if (shouldConcludeLandedFlight(record.flight)) {
-        serverTrackedFlights.delete(key);
-        saveServerTrackedFlights();
+        await queueTrackedFlightConclusion(record.flight);
         continue;
       }
 

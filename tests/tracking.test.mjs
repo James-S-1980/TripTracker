@@ -50,9 +50,13 @@ async function post(baseUrl, endpoint, body) {
 }
 
 async function trackedFlights(baseUrl) {
+  return (await trackedSnapshot(baseUrl)).flights;
+}
+
+async function trackedSnapshot(baseUrl) {
   const response = await fetch(`${baseUrl}/tracked-flights`);
   assert.equal(response.status, 200);
-  return (await response.json()).flights;
+  return await response.json();
 }
 
 function flight(origin, destination) {
@@ -114,4 +118,38 @@ test("deleted leg stays untracked across stale registrations and a restart", asy
 
   await post(server.baseUrl, "/notifications/register-tracked", { flights: [second] });
   assert.deepEqual(await trackedFlights(server.baseUrl), []);
+});
+
+test("expired landed leg is completed once and cannot be restored by stale browser state", async (t) => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), "triptracker-completed-test-"));
+  const port = await availablePort();
+  const completed = {
+    ...flight("ORD", "BWI"),
+    status: "Landed",
+    landedAt: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+    arrivalTime: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+  };
+  const expectedKey = "UA-9999-2026-09-19-ORD-BWI";
+  let server = await startServer(port, dataDir);
+  t.after(async () => {
+    server.child.kill();
+    await fs.rm(dataDir, { recursive: true, force: true });
+  });
+
+  await post(server.baseUrl, "/notifications/register-tracked", { flights: [completed] });
+  const concluded = await trackedSnapshot(server.baseUrl);
+  assert.deepEqual(concluded.flights, []);
+  assert.equal(concluded.serverTrackedFlights, 0);
+  assert.equal(concluded.untrackedFlightKeys.includes(expectedKey), true);
+
+  await post(server.baseUrl, "/notifications/register-tracked", { flights: [completed] });
+  assert.deepEqual(await trackedFlights(server.baseUrl), []);
+
+  server.child.kill();
+  await once(server.child, "exit");
+  server = await startServer(port, dataDir);
+  await post(server.baseUrl, "/notifications/register-tracked", { flights: [completed] });
+  const restored = await trackedSnapshot(server.baseUrl);
+  assert.deepEqual(restored.flights, []);
+  assert.equal(restored.untrackedFlightKeys.includes(expectedKey), true);
 });
