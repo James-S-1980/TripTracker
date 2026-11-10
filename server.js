@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { summarizeAirportOperations } from "./server/airportOperations.js";
 import { parseFlightAwareHistory, summarizeFlightHistory } from "./server/flightStatistics.js";
 import { createNotificationState, evaluateFlightNotificationPolicy } from "./server/notificationPolicy.js";
+import { ExpiringRequestCache } from "./server/requestCache.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,9 +28,13 @@ const earthRadiusMiles = 3958.7613;
 const adsbCacheMs = 30000;
 const adsbMaxRadiusNm = 250;
 const flightSearchCacheMs = 60 * 1000;
+const flightLookupCacheMs = 10 * 1000;
 const flightStatisticsCacheMs = 6 * 60 * 60 * 1000;
 const airportOperationsCacheMs = 60 * 1000;
-const serverTrackingPollMs = 30000;
+const serverTrackingPollMs = Math.max(5000, Number(process.env.TRIPTRACKER_POLL_MS) || 30000);
+const serverTrackingConcurrency = Math.max(1, Math.min(8, Number(process.env.TRIPTRACKER_POLL_CONCURRENCY) || 4));
+const healthCacheMs = 1000;
+const conclusionSweepIntervalMs = 1000;
 const landedDisplayMs = 10 * 60 * 1000;
 const runtimeDataDir = process.env.TRIPTRACKER_DATA_DIR ?? path.join(__dirname, "data");
 const serverTrackedFlightsPath = path.join(runtimeDataDir, "server-tracked-flights.json");
@@ -40,9 +45,14 @@ const generatedAirlines = JSON.parse(fs.readFileSync(path.join(__dirname, "src",
 const generatedRunways = JSON.parse(fs.readFileSync(path.join(__dirname, "src", "runwayCatalog.generated.json"), "utf8"));
 const adsbPointCache = new Map();
 const flightSearchCache = new Map();
+const flightLookupCache = new ExpiringRequestCache({ ttlMs: flightLookupCacheMs, maxEntries: 200 });
 const flightStatisticsCache = new Map();
 let airportOperationsCache = null;
 let airportOperationsRequest = null;
+let healthCache = null;
+let serverTrackingPollInProgress = false;
+let conclusionSweepPromise = null;
+let lastConclusionSweepAt = 0;
 const serverTrackedFlights = new Map();
 const untrackedFlights = new Set();
 const notificationDeliveryKeys = new Map();
@@ -73,6 +83,11 @@ app.use((request, response, next) => {
   next();
 });
 app.get(["/healthz", "/trip/healthz"], (_request, response) => {
+  const now = Date.now();
+  if (healthCache && now - healthCache.checkedAt < healthCacheMs) {
+    response.status(healthCache.status).json(healthCache.payload);
+    return;
+  }
   const checks = {
     webAssets: healthFileCheck(path.join(__dirname, "dist", "index.html"), fs.constants.R_OK),
     runtimeData: healthRuntimeDataCheck(runtimeDataDir, [
@@ -83,12 +98,15 @@ app.get(["/healthz", "/trip/healthz"], (_request, response) => {
     failureTest: healthFailureTestCheck(),
   };
   const healthy = Object.values(checks).every((check) => check.ok);
-  response.status(healthy ? 200 : 503).json({
+  const status = healthy ? 200 : 503;
+  const payload = {
     status: healthy ? "healthy" : "unhealthy",
     version: appVersion,
     uptimeSeconds: Math.floor(process.uptime()),
     checks,
-  });
+  };
+  healthCache = { checkedAt: now, status, payload };
+  response.status(status).json(payload);
 });
 
 function healthFileCheck(filePath, mode) {
@@ -927,6 +945,18 @@ app.get(["/api/runways", "/trip/api/runways"], (request, response) => {
 });
 
 async function lookupFlightData(requestedAirline, flightNumber, date, options = {}) {
+  const key = [
+    normalizeAirlineCode(String(requestedAirline ?? "").toUpperCase()),
+    String(flightNumber ?? ""),
+    String(date ?? ""),
+    String(options.selectedFlightId ?? ""),
+    options.allowAmbiguous ? "ambiguous" : "single",
+    options.summaryOnly ? "summary" : "full",
+  ].join("::");
+  return flightLookupCache.getOrLoad(key, () => performFlightLookup(requestedAirline, flightNumber, date, options));
+}
+
+async function performFlightLookup(requestedAirline, flightNumber, date, options = {}) {
   const airline = normalizeAirlineCode(String(requestedAirline ?? "").toUpperCase());
   const ident = `${airlineIcaoByIata[airline] ?? airline}${flightNumber}`;
   const errors = [];
@@ -1037,23 +1067,35 @@ async function handleConcludedNotificationRequest(flight, changes = []) {
 app.post(["/api/notifications/register-tracked", "/trip/api/notifications/register-tracked"], (request, response) => {
   const flights = Array.isArray(request.body?.flights) ? request.body.flights : [];
   let registered = 0;
+  let unchanged = 0;
 
   for (const flight of flights) {
     if (!flight?.flightNumber || !flight?.origin?.code || !flight?.destination?.code || flight.status === "Arrived") continue;
     if (!lookupArgsFromFlight(flight)) continue;
-    if (registerServerTrackedFlight(flight, { persist: false, preserveExisting: true })) registered += 1;
+    const key = trackedFlightKey(flight);
+    const alreadyTracked = serverTrackedFlights.has(key);
+    if (!registerServerTrackedFlight(flight, { persist: false, preserveExisting: true })) continue;
+    if (alreadyTracked) unchanged += 1;
+    else registered += 1;
   }
 
   if (registered > 0) saveServerTrackedFlights();
-  response.json({ ok: true, registered, serverTrackedFlights: serverTrackedFlights.size });
+  response.json({ ok: true, registered, unchanged, serverTrackedFlights: serverTrackedFlights.size });
 });
 
 app.get(["/api/tracked-flights", "/trip/api/tracked-flights"], async (request, response) => {
   await concludeExpiredServerTrackedFlights();
+  const requestedKeys = [...new Set(String(request.query.keys ?? "")
+    .split(",")
+    .map((key) => key.trim())
+    .filter(Boolean))].slice(0, 200);
+  const untrackedFlightKeys = requestedKeys.length > 0
+    ? requestedKeys.filter((key) => untrackedFlights.has(key))
+    : [...untrackedFlights];
   response.json({
     flights: serverTrackedFlightList(),
     serverTrackedFlights: serverTrackedFlights.size,
-    untrackedFlightKeys: [...untrackedFlights],
+    untrackedFlightKeys,
   });
 });
 
@@ -1094,6 +1136,8 @@ app.get(["/api/notifications/status", "/trip/api/notifications/status"], (reques
     senderConfigured: Boolean(smsFrom),
     serverTrackedFlights: serverTrackedFlights.size,
     serverPollSeconds: serverTrackingPollMs / 1000,
+    serverPollConcurrency: serverTrackingConcurrency,
+    serverPollInProgress: serverTrackingPollInProgress,
     trackedFlights: [...serverTrackedFlights.values()].map((record) => ({
       flightNumber: record.flight?.flightNumber,
       route: record.flight?.origin?.code && record.flight?.destination?.code
@@ -1220,9 +1264,9 @@ function registerServerTrackedFlight(flight, options = {}) {
   return record;
 }
 
-function queueTrackedFlightObservation(flight) {
+function queueTrackedFlightObservation(flight, options = {}) {
   const key = trackedFlightKey(flight);
-  return queueTrackedFlightWork(key, () => processTrackedFlightObservation(flight));
+  return queueTrackedFlightWork(key, () => processTrackedFlightObservation(flight, options));
 }
 
 function queueTrackedFlightConclusion(flight, changes = []) {
@@ -1285,12 +1329,12 @@ async function concludeTrackedFlight(key, flight, changes = []) {
   };
 }
 
-async function processTrackedFlightObservation(flight) {
+async function processTrackedFlightObservation(flight, options = {}) {
   const key = trackedFlightKey(flight);
   if (untrackedFlights.has(key)) return { notificationsSent: 0, suppressed: true };
   const existingRecord = serverTrackedFlights.get(key);
   if (!existingRecord) {
-    registerServerTrackedFlight(flight);
+    registerServerTrackedFlight(flight, { persist: options.persist !== false });
     return { notificationsSent: 0, registered: true };
   }
 
@@ -1323,7 +1367,7 @@ async function processTrackedFlightObservation(flight) {
     lastError: undefined,
     notificationState: assessment.state,
   });
-  saveServerTrackedFlights();
+  if (options.persist !== false || notificationsSent > 0) saveServerTrackedFlights();
   return {
     notificationsSent,
     notificationTypes: assessment.notifications.map((notification) => notification.eventType),
@@ -1339,6 +1383,20 @@ function serverTrackedFlightList() {
 }
 
 async function concludeExpiredServerTrackedFlights() {
+  if (serverTrackedFlights.size === 0) return;
+  const now = Date.now();
+  if (conclusionSweepPromise) return conclusionSweepPromise;
+  if (now - lastConclusionSweepAt < conclusionSweepIntervalMs) return;
+  lastConclusionSweepAt = now;
+  conclusionSweepPromise = sweepExpiredServerTrackedFlights();
+  try {
+    await conclusionSweepPromise;
+  } finally {
+    conclusionSweepPromise = null;
+  }
+}
+
+async function sweepExpiredServerTrackedFlights() {
   for (const [key, record] of [...serverTrackedFlights.entries()]) {
     if (shouldConcludeLandedFlight(record.flight)) {
       await queueTrackedFlightConclusion(record.flight).catch((error) => {
@@ -1354,28 +1412,49 @@ async function concludeExpiredServerTrackedFlights() {
 }
 
 async function pollServerTrackedFlights() {
-  if (serverTrackedFlights.size === 0) return;
+  if (serverTrackingPollInProgress || serverTrackedFlights.size === 0) return;
+  serverTrackingPollInProgress = true;
+  try {
+    const entries = [...serverTrackedFlights.entries()];
+    let nextIndex = 0;
+    let registryChanged = false;
 
-  for (const [key, record] of [...serverTrackedFlights.entries()]) {
-    try {
-      if (shouldConcludeLandedFlight(record.flight)) {
-        await queueTrackedFlightConclusion(record.flight);
-        continue;
+    async function worker() {
+      while (nextIndex < entries.length) {
+        const entry = entries[nextIndex];
+        nextIndex += 1;
+        if (await pollServerTrackedFlight(...entry)) registryChanged = true;
       }
-
-      const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date, { selectedFlightId: record.flight?.id });
-      if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) continue;
-      const displayFlight = landedDisplayFlight(nextFlight, record.flight);
-      await queueTrackedFlightObservation(displayFlight);
-    } catch (error) {
-      if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) continue;
-      serverTrackedFlights.set(key, {
-        ...record,
-        lastCheckedAt: new Date().toISOString(),
-        lastError: error instanceof Error ? error.message : "Flight refresh failed.",
-      });
-      saveServerTrackedFlights();
     }
+
+    const workerCount = Math.min(serverTrackingConcurrency, entries.length);
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    if (registryChanged) saveServerTrackedFlights();
+  } finally {
+    serverTrackingPollInProgress = false;
+  }
+}
+
+async function pollServerTrackedFlight(key, record) {
+  try {
+    if (shouldConcludeLandedFlight(record.flight)) {
+      await queueTrackedFlightConclusion(record.flight);
+      return false;
+    }
+
+    const nextFlight = await lookupFlightData(record.airline, record.flightNumber, record.date, { selectedFlightId: record.flight?.id });
+    if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) return false;
+    const displayFlight = landedDisplayFlight(nextFlight, record.flight);
+    await queueTrackedFlightObservation(displayFlight, { persist: false });
+    return true;
+  } catch (error) {
+    if (untrackedFlights.has(key) || !serverTrackedFlights.has(key)) return false;
+    serverTrackedFlights.set(key, {
+      ...record,
+      lastCheckedAt: new Date().toISOString(),
+      lastError: error instanceof Error ? error.message : "Flight refresh failed.",
+    });
+    return true;
   }
 }
 
@@ -1383,7 +1462,7 @@ function compactFlightForTracking(flight) {
   if (!flight) return flight;
   return {
     ...flight,
-    track: undefined,
+    track: Array.isArray(flight.track) ? flight.track.slice(-120) : undefined,
     alerts: Array.isArray(flight.alerts) ? flight.alerts.slice(0, 4) : [],
   };
 }
@@ -2828,8 +2907,15 @@ function airlineLogoFor(code) {
   return airlineBrands[code]?.logoUrl ?? "";
 }
 
-app.use(express.static(path.join(__dirname, "dist")));
-app.use("/trip", express.static(path.join(__dirname, "dist")));
+const staticAssetOptions = {
+  setHeaders(response, filePath) {
+    if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+      response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    }
+  },
+};
+app.use(express.static(path.join(__dirname, "dist"), staticAssetOptions));
+app.use("/trip", express.static(path.join(__dirname, "dist"), staticAssetOptions));
 app.use((request, response) => {
   if (request.path.startsWith("/trip")) {
     response.sendFile(path.join(__dirname, "dist", "index.html"));

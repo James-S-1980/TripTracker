@@ -153,6 +153,12 @@ Five one-time milestone emails are sent for takeoff, 50% route progress, descent
 
 Set `TRIPTRACKER_SMTP_USER`, `TRIPTRACKER_SMTP_APP_PASSWORD`, and `TRIPTRACKER_SMS_TO` in `.env.local`; despite its legacy name, `TRIPTRACKER_SMS_TO` is the email recipient. Do not commit `.env.local`.
 
+## Performance and stress testing
+
+The server is the single source of automatic 30-second flight refreshes. Browser tabs consume the shared tracked-flight snapshot instead of repeating provider calls, while a manual refresh still requests current provider data. Identical provider requests within 10 seconds are coalesced, polling is limited to four concurrent flights and cannot overlap, and registry updates from a poll cycle are persisted as one batch.
+
+Run `npm run stress` to start an isolated TripTracker process with temporary fixture data and exercise health checks, runway reads, large tracked-flight snapshots, filtered completion state, and idempotent registration. The harness never uses the production data directory or sends email.
+
 ## Build
 
 ```bash

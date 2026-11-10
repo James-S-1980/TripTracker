@@ -90,6 +90,9 @@ test("deleted leg stays untracked across stale registrations and a restart", asy
 
   await post(server.baseUrl, "/notifications/register-tracked", { flights: [first, second] });
   assert.equal((await trackedFlights(server.baseUrl)).length, 2);
+  const duplicateRegistration = await post(server.baseUrl, "/notifications/register-tracked", { flights: [first, second] });
+  assert.equal(duplicateRegistration.registered, 0);
+  assert.equal(duplicateRegistration.unchanged, 2);
 
   await post(server.baseUrl, "/notifications/untrack", { flight: first });
   assert.deepEqual((await trackedFlights(server.baseUrl)).map((item) => item.origin.code), ["DEN"]);
@@ -141,6 +144,10 @@ test("expired landed leg is completed once and cannot be restored by stale brows
   assert.deepEqual(concluded.flights, []);
   assert.equal(concluded.serverTrackedFlights, 0);
   assert.equal(concluded.untrackedFlightKeys.includes(expectedKey), true);
+
+  const filteredResponse = await fetch(`${server.baseUrl}/tracked-flights?keys=${expectedKey},UA-0000-2099-01-01-IAD-ORD`);
+  assert.equal(filteredResponse.status, 200);
+  assert.deepEqual((await filteredResponse.json()).untrackedFlightKeys, [expectedKey]);
 
   await post(server.baseUrl, "/notifications/register-tracked", { flights: [completed] });
   assert.deepEqual(await trackedFlights(server.baseUrl), []);

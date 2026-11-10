@@ -45,12 +45,6 @@ type DelayOutlook = {
   factors: string[];
 };
 
-function notifyFlightEvent(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): void {
-  sendFlightNotification(eventType, flight, changes).catch((error) => {
-    console.warn("TripTracker email notification failed", error);
-  });
-}
-
 async function concludeFlightEvent(flight: FlightLeg, changes: string[]): Promise<boolean> {
   try {
     const result = await sendFlightNotification("concluded", flight, changes);
@@ -617,6 +611,7 @@ export function App() {
   const lastSoundAtRef = useRef<Record<string, number>>({});
   const deletedFlightKeysRef = useRef<Set<string>>(new Set());
   const serverUntrackedFlightKeysRef = useRef<Set<string>>(new Set());
+  const lastRegistrationSignatureRef = useRef("");
 
   const activeFlight = activeId ? flights.find((flight) => flight.id === activeId) : flights[0];
   const activeTiming = activeFlight ? flightTiming(activeFlight) : null;
@@ -649,6 +644,9 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
     const trackableFlights = flights.filter((flight) => !serverUntrackedFlightKeysRef.current.has(serverTrackedFlightKey(flight)));
+    const signature = trackableFlights.map(serverTrackedFlightKey).sort().join("|");
+    if (signature === lastRegistrationSignatureRef.current) return;
+    lastRegistrationSignatureRef.current = signature;
     void registerTrackedFlights(trackableFlights);
   }, [flights]);
 
@@ -693,7 +691,7 @@ export function App() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchTrackedFlights()
+    fetchTrackedFlights(flights.map(serverTrackedFlightKey))
       .then((snapshot) => {
         if (cancelled) return;
         snapshot.untrackedFlightKeys.forEach((key) => serverUntrackedFlightKeysRef.current.add(key));
@@ -886,7 +884,7 @@ export function App() {
       : flights;
     if (flightsToRefresh.length === 0) return;
 
-    const serverSnapshot = await fetchTrackedFlights().catch(() => null);
+    const serverSnapshot = await fetchTrackedFlights(flights.map(serverTrackedFlightKey)).catch(() => null);
     serverSnapshot?.untrackedFlightKeys.forEach((key) => serverUntrackedFlightKeysRef.current.add(key));
     const remotelyRemovedIds = new Set(
       flights
@@ -897,17 +895,33 @@ export function App() {
       !remotelyRemovedIds.has(flight.id) && shouldRemoveLandedFlight(flight)
     ));
     const expiredLandedIds = new Set(expiredLandedFlights.map((flight) => flight.id));
-    const lookupFlights = flightsToRefresh.filter((flight) => (
+    const candidateFlights = flightsToRefresh.filter((flight) => (
       !expiredLandedIds.has(flight.id) && !remotelyRemovedIds.has(flight.id)
     ));
-    const refreshed = await Promise.allSettled(lookupFlights.map((flight) => {
-      const [code, number] = splitFlightDesignator(flight.flightNumber);
-      return lookupFlight(code, number, flight.date, { monitor: true, flightId: flight.id }).then(requireSingleFlight);
-    }));
+    const refreshedFlights: Array<{ original: FlightLeg; next: FlightLeg }> = [];
     const refreshMap = new Map<string, FlightLeg>();
     const concludedIds = new Set<string>(remotelyRemovedIds);
     const conclusionCandidates = new Map<string, { flight: FlightLeg; changes: string[] }>();
     const failures: string[] = [];
+
+    if (silent && serverSnapshot) {
+      const serverFlightsById = new Map(serverSnapshot.flights.map((flight) => [flight.id, flight]));
+      const serverFlightsByKey = new Map(serverSnapshot.flights.map((flight) => [serverTrackedFlightKey(flight), flight]));
+      candidateFlights.forEach((original) => {
+        const next = serverFlightsById.get(original.id) ?? serverFlightsByKey.get(serverTrackedFlightKey(original));
+        if (next) refreshedFlights.push({ original, next });
+      });
+    } else {
+      const refreshed = await Promise.allSettled(candidateFlights.map((flight) => {
+        const [code, number] = splitFlightDesignator(flight.flightNumber);
+        return lookupFlight(code, number, flight.date, { monitor: true, flightId: flight.id }).then(requireSingleFlight);
+      }));
+      refreshed.forEach((result, index) => {
+        const original = candidateFlights[index];
+        if (result.status === "fulfilled") refreshedFlights.push({ original, next: result.value });
+        else failures.push(original.flightNumber);
+      });
+    }
 
     expiredLandedFlights.forEach((flight) => {
       conclusionCandidates.set(flight.id, {
@@ -916,25 +930,18 @@ export function App() {
       });
     });
 
-    refreshed.forEach((result, index) => {
-      const original = lookupFlights[index];
-      if (result.status === "fulfilled") {
-        const nextFlight = mergeKnownFlightEnrichment(original, landedDisplayFlight(result.value, original));
-        const changes = describeFlightChanges(original, nextFlight);
-        refreshMap.set(original.id, nextFlight);
-        soundEventsForFlightChange(original, nextFlight).forEach((eventType) => {
-          playFlightSound(eventType, original.id);
+    refreshedFlights.forEach(({ original, next }) => {
+      const nextFlight = mergeKnownFlightEnrichment(original, landedDisplayFlight(next, original));
+      const changes = describeFlightChanges(original, nextFlight);
+      refreshMap.set(original.id, nextFlight);
+      soundEventsForFlightChange(original, nextFlight).forEach((eventType) => {
+        playFlightSound(eventType, original.id);
+      });
+      if (shouldRemoveLandedFlight(nextFlight)) {
+        conclusionCandidates.set(original.id, {
+          flight: nextFlight,
+          changes: changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"],
         });
-        if (shouldRemoveLandedFlight(nextFlight)) {
-          conclusionCandidates.set(original.id, {
-            flight: nextFlight,
-            changes: changes.length > 0 ? changes : ["Flight landed 10 minutes ago; tracking concluded"],
-          });
-        } else if (changes.length > 0) {
-          notifyFlightEvent("updated", nextFlight, changes);
-        }
-      } else {
-        failures.push(original.flightNumber);
       }
     });
 

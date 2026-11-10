@@ -104,8 +104,10 @@ export async function registerTrackedFlights(flights: FlightLeg[]): Promise<void
   }).catch(() => undefined);
 }
 
-export async function fetchTrackedFlights(): Promise<TrackedFlightsSnapshot> {
-  const response = await fetch(`${apiBase()}/tracked-flights`);
+export async function fetchTrackedFlights(trackedKeys: string[] = []): Promise<TrackedFlightsSnapshot> {
+  const keys = [...new Set(trackedKeys.filter(Boolean))].slice(0, 200);
+  const query = keys.length > 0 ? `?${new URLSearchParams({ keys: keys.join(",") })}` : "";
+  const response = await fetch(`${apiBase()}/tracked-flights${query}`);
   if (!response.ok) return { flights: [], untrackedFlightKeys: [] };
   const payload = await response.json().catch(() => null) as { flights?: FlightLeg[]; untrackedFlightKeys?: string[] } | null;
   return {
