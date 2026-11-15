@@ -82,6 +82,15 @@ export async function fetchAirportDelays(airportCodes: string[], signal?: AbortS
   return await response.json() as AirportDelayReport;
 }
 
+export async function fetchAirportDelayNetwork(signal?: AbortSignal): Promise<AirportDelayReport> {
+  const response = await fetch(`${apiBase()}/airport-delays?scope=network`, { signal });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "Regional airport delay status is unavailable.");
+  }
+  return await response.json() as AirportDelayReport;
+}
+
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<FlightNotificationResult> {
   const response = await fetch(`${apiBase()}/notifications/flight-event`, {
     method: "POST",

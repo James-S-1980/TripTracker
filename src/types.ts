@@ -124,6 +124,8 @@ export type AirportDelayStatus = {
   airportCode: string;
   airportName: string;
   city?: string;
+  lat?: number;
+  lon?: number;
   timeZone?: string;
   status: string;
   severity: AirportDelaySeverity;

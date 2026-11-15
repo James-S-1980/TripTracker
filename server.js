@@ -815,19 +815,30 @@ app.get(["/api/flights/statistics", "/trip/api/flights/statistics"], async (requ
 });
 
 app.get(["/api/airport-delays", "/trip/api/airport-delays"], async (request, response) => {
-  const airportCodes = [...new Set(
+  const networkScope = String(request.query.scope ?? "").toLowerCase() === "network";
+  const requestedAirportCodes = [...new Set(
     String(request.query.airports ?? "")
       .split(",")
       .map((code) => code.trim().toUpperCase())
       .filter(Boolean),
   )];
-  if (airportCodes.length === 0 || airportCodes.length > 8 || airportCodes.some((code) => !/^[A-Z0-9]{3}$/.test(code))) {
+  if (!networkScope && (
+    requestedAirportCodes.length === 0 ||
+    requestedAirportCodes.length > 8 ||
+    requestedAirportCodes.some((code) => !/^[A-Z0-9]{3}$/.test(code))
+  )) {
     response.status(400).json({ error: "Provide between one and eight valid three-character airport codes." });
     return;
   }
 
   try {
     const feed = await fetchFaaAirportOperations();
+    const airportCodes = networkScope
+      ? [...new Set([
+          ...feed.pacingAirports.map((airport) => String(airport?.airportId ?? "").trim().toUpperCase()),
+          ...feed.events.map((event) => String(event?.airportId ?? "").trim().toUpperCase()),
+        ])].filter((code) => /^[A-Z0-9]{3}$/.test(code) && airportCatalog[code])
+      : requestedAirportCodes;
     const payload = summarizeAirportOperations({
       requestedCodes: airportCodes,
       events: feed.events,
@@ -844,6 +855,8 @@ app.get(["/api/airport-delays", "/trip/api/airport-delays"], async (request, res
           ...airport,
           airportName: catalogAirport?.name ?? airport.airportName,
           city: catalogAirport?.city,
+          lat: catalogAirport?.lat,
+          lon: catalogAirport?.lon,
           timeZone: catalogAirport?.timeZone,
         };
       }),

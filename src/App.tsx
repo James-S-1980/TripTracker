@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { airlineLogoFor, airlineMatches } from "./airlines";
 import { boardingEstimate } from "./boarding";
 import type { BoardingEstimate } from "./boarding";
-import { fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { congestionColor, congestionRegions } from "./congestion";
+import type { CongestionRegion } from "./congestion";
+import { fetchAirportDelayNetwork, fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { flightTiming, timingLabel } from "./flightTiming";
 import type { TimeComparison } from "./flightTiming";
 import { fetchWeather } from "./weather";
@@ -1757,10 +1759,15 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const leafletMapRef = useRef<L.Map | null>(null);
   const radarLayerRef = useRef<L.TileLayer | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
+  const congestionLayerRef = useRef<L.LayerGroup | null>(null);
   const lastAutoFitKeyRef = useRef<string | null>(null);
   const [radarEnabled, setRadarEnabled] = useState(true);
   const [radarFrame, setRadarFrame] = useState<{ generated: number | null; tileUrl: string } | null>(null);
   const [radarError, setRadarError] = useState<string | null>(null);
+  const [congestionEnabled, setCongestionEnabled] = useState(true);
+  const [congestionReport, setCongestionReport] = useState<AirportDelayReport | null>(null);
+  const [congestionError, setCongestionError] = useState<string | null>(null);
   const [runwayCatalog, setRunwayCatalog] = useState<RunwayCatalog>({});
   const routePoints = useMemo(() => {
     if (flight.track && flight.track.length > 1) {
@@ -1781,6 +1788,10 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     () => likelyRunwayAlignment(flight, runwayApproaches.filter((approach) => approach.airportCode === flight.destination.code)),
     [flight, runwayApproaches],
   );
+  const delayRegions = useMemo(
+    () => congestionRegions(congestionReport?.airports ?? []),
+    [congestionReport],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -1795,6 +1806,36 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
       cancelled = true;
     };
   }, [flight.origin.code, flight.destination.code]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let requestInProgress = false;
+
+    const loadCongestion = async () => {
+      if (requestInProgress) return;
+      requestInProgress = true;
+      try {
+        const report = await fetchAirportDelayNetwork(controller.signal);
+        if (!controller.signal.aborted) {
+          setCongestionReport(report);
+          setCongestionError(null);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setCongestionError(error instanceof Error ? error.message : "Regional airport delay status is unavailable.");
+        }
+      } finally {
+        requestInProgress = false;
+      }
+    };
+
+    void loadCongestion();
+    const intervalId = window.setInterval(() => void loadCongestion(), 60 * 1000);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1848,6 +1889,11 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         radarPane.style.zIndex = "350";
         radarPane.style.pointerEvents = "none";
       }
+      leafletMapRef.current.createPane("congestionPane");
+      const congestionPane = leafletMapRef.current.getPane("congestionPane");
+      if (congestionPane) {
+        congestionPane.style.zIndex = "360";
+      }
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
@@ -1857,27 +1903,25 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     }
 
     const map = leafletMapRef.current;
-    map.eachLayer((layer) => {
-      if (!(layer instanceof L.TileLayer)) {
-        layer.remove();
-      }
-    });
+    routeLayerRef.current?.removeFrom(map);
+    routeLayerRef.current = L.layerGroup().addTo(map);
+    const routeLayer = routeLayerRef.current;
 
     const originPoint: L.LatLngTuple = [flight.origin.lat, flight.origin.lon];
     const destinationPoint: L.LatLngTuple = [flight.destination.lat, flight.destination.lon];
     const aircraft = flight.aircraftPosition;
     const aircraftPoint: L.LatLngTuple | undefined = aircraft ? [aircraft.lat, aircraft.lon] : undefined;
 
-    L.polyline(routePoints, { color: "#07111d", opacity: 0.88, weight: 8 }).addTo(map);
-    L.polyline(routePoints, { color: "#4ed9ff", opacity: 0.92, weight: 4 }).addTo(map);
-    drawRunwayOverlay(map, flight.origin.code, runwayCatalog[flight.origin.code] ?? [], runwayApproaches, false);
-    drawRunwayOverlay(map, flight.destination.code, runwayCatalog[flight.destination.code] ?? [], runwayApproaches, true);
+    L.polyline(routePoints, { color: "#07111d", opacity: 0.88, weight: 8 }).addTo(routeLayer);
+    L.polyline(routePoints, { color: "#4ed9ff", opacity: 0.92, weight: 4 }).addTo(routeLayer);
+    drawRunwayOverlay(routeLayer, flight.origin.code, runwayCatalog[flight.origin.code] ?? [], runwayApproaches, false);
+    drawRunwayOverlay(routeLayer, flight.destination.code, runwayCatalog[flight.destination.code] ?? [], runwayApproaches, true);
     L.circleMarker(originPoint, { color: "#d8f8ff", fillColor: "#38c7f4", fillOpacity: 1, radius: 7, weight: 2 })
       .bindPopup(`${flight.origin.code} ${flight.origin.city}`)
-      .addTo(map);
+      .addTo(routeLayer);
     L.circleMarker(destinationPoint, { color: "#fff0dc", fillColor: "#ff9f43", fillOpacity: 1, radius: 7, weight: 2 })
       .bindPopup(`${flight.destination.code} ${flight.destination.city}`)
-      .addTo(map);
+      .addTo(routeLayer);
 
     if (aircraftPoint) {
       const live = aircraft?.source !== "Estimated from schedule";
@@ -1902,7 +1946,7 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
           aircraft?.source,
           `${aircraft?.altitudeFt.toLocaleString()} ft`,
         ].filter(Boolean).join("<br>"))
-        .addTo(map);
+        .addTo(routeLayer);
     }
 
     if (lastAutoFitKeyRef.current !== autoFitKey) {
@@ -1912,6 +1956,61 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
     }
     window.setTimeout(() => map.invalidateSize(), 0);
   }, [autoFitKey, flight, routePoints, runwayApproaches, runwayCatalog]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return;
+
+    congestionLayerRef.current?.removeFrom(map);
+    congestionLayerRef.current = null;
+    if (!congestionEnabled || delayRegions.length === 0) return;
+
+    const layer = L.layerGroup().addTo(map);
+    congestionLayerRef.current = layer;
+    delayRegions.forEach((region) => {
+      const color = congestionColor(region.severity);
+      const radius = region.airports.length > 1 ? 210000 : 165000;
+      const intensity = region.severity === "clear" ? 0.16 : region.severity === "critical" ? 0.4 : 0.3;
+      L.circle([region.lat, region.lon], {
+        className: `delay-heat-halo severity-${region.severity}`,
+        color,
+        fillColor: color,
+        fillOpacity: intensity * 0.22,
+        interactive: false,
+        opacity: 0,
+        pane: "congestionPane",
+        radius,
+        weight: 0,
+      }).addTo(layer);
+      L.circle([region.lat, region.lon], {
+        className: `delay-heat-mid severity-${region.severity}`,
+        color,
+        fillColor: color,
+        fillOpacity: intensity * 0.52,
+        interactive: false,
+        opacity: 0,
+        pane: "congestionPane",
+        radius: radius * 0.66,
+        weight: 0,
+      }).addTo(layer);
+      L.circle([region.lat, region.lon], {
+        className: `delay-heat-core severity-${region.severity}`,
+        color,
+        fillColor: color,
+        fillOpacity: intensity,
+        opacity: 0,
+        pane: "congestionPane",
+        radius: radius * 0.38,
+        weight: 0,
+      })
+        .bindTooltip(congestionTooltip(region), {
+          className: "delay-heat-tooltip",
+          direction: "top",
+          sticky: true,
+        })
+        .addTo(layer);
+    });
+  }, [congestionEnabled, delayRegions]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -1953,10 +2052,29 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
             <Radar size={16} />
             <span>Radar</span>
           </button>
+          <button
+            aria-pressed={congestionEnabled}
+            className={`radar-toggle ${congestionEnabled ? "active" : ""}`}
+            onClick={() => setCongestionEnabled((enabled) => !enabled)}
+            title="Toggle regional airport delay heat overlay"
+            type="button"
+          >
+            <Activity size={16} />
+            <span>Delay heat</span>
+          </button>
           <span className="source-chip">{flight.dataSource}</span>
         </div>
       </div>
-      <div className="route-map" ref={mapRef} />
+      <div className="route-map-frame">
+        <div className="route-map" ref={mapRef} />
+        {congestionEnabled && congestionReport && (
+          <div className="delay-heat-legend" aria-label="Airport delay heat legend">
+            <span><i className="clear" />Normal</span>
+            <span><i className="minor" />Moderate</span>
+            <span><i className="critical" />Severe</span>
+          </div>
+        )}
+      </div>
       <div className="map-telemetry">
         <strong>{flight.aircraftPosition?.source ?? "No aircraft position available"}</strong>
         {flight.aircraftPosition?.callsign && <span>Callsign: {flight.aircraftPosition.callsign}</span>}
@@ -1964,10 +2082,36 @@ function FlightMap({ flight }: { flight: FlightLeg }) {
         <span>{likelyArrivalRunway ? `Likely arrival: RWY ${likelyArrivalRunway.runwayIdent} (${likelyArrivalRunway.crossTrackNm?.toFixed(1)} NM off)` : "Arrival runway alignment pending"}</span>
         {flight.aircraftPosition?.timestamp && <span>Position time: {timeAgo(flight.aircraftPosition.timestamp)}</span>}
         <span>Radar: {radarError ? "Unavailable" : radarEnabled ? `On, ${formatRadarTimestamp(radarFrame?.generated ?? null)}` : "Off"}</span>
+        <span>Delay heat: {congestionError ? "Unavailable" : congestionEnabled ? congestionReport ? `On, ${timeAgo(congestionReport.updatedAt)}` : "Loading" : "Off"}</span>
       </div>
-      <p className="source-line">Route, status, and progress source: {flight.dataSource}. Weather radar source: RainViewer. Runway overlay source: OurAirports.</p>
+      <p className="source-line">Route, status, and progress source: {flight.dataSource}. Weather radar source: RainViewer. Delay heat source: FAA National Airspace System Status. Runway overlay source: OurAirports.</p>
     </section>
   );
+}
+
+function congestionTooltip(region: CongestionRegion): string {
+  const cities = [...new Set(region.airports.map((airport) => airport.city).filter(Boolean))];
+  const codes = region.airports.map((airport) => airport.airportCode).join(" / ");
+  const label = cities.length === 1 ? `${cities[0]} area` : cities.length > 1 ? `${cities.slice(0, 2).join(" / ")} area` : `${codes} area`;
+  const activeEvents = region.airports
+    .flatMap((airport) => airport.events.map((event) => ({ airportCode: airport.airportCode, event })))
+    .slice(0, 3);
+  const status = activeEvents.length === 0
+    ? "No active FAA delay program"
+    : activeEvents.map(({ airportCode, event }) => (
+      `${escapeMapText(airportCode)}: ${escapeMapText(event.title)}${event.averageDelayMinutes ? ` (${event.averageDelayMinutes} min avg)` : ""}`
+    )).join("<br>");
+  return `<strong>${escapeMapText(label)}</strong><span>${escapeMapText(codes)}</span><br>${status}`;
+}
+
+function escapeMapText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+  })[character] ?? character);
 }
 
 function greatCirclePoints(start: [number, number], end: [number, number], segments: number): L.LatLngTuple[] {
@@ -1999,7 +2143,7 @@ function approachFromRunwayEnd(airportCode: string, runwayEnd: RunwayEnd, extens
 }
 
 function drawRunwayOverlay(
-  map: L.Map,
+  map: L.Map | L.LayerGroup,
   airportCode: string,
   runways: AirportRunway[],
   approaches: RunwayApproach[],
