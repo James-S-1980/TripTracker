@@ -148,6 +148,59 @@ export type AirportDelayReport = {
   stale: boolean;
 };
 
+export type AirTravelHealth = {
+  grade: "A" | "B" | "C" | "D" | "F";
+  label: string;
+  summary: string;
+  factors: string[];
+  snapshot: {
+    onTime: number;
+    delayed: number;
+    cancelled: number;
+    total: number;
+    onTimeRate: number;
+    delayedRate: number;
+    cancelledRate: number;
+    disruptionRate: number;
+    timestamp: string;
+    normalDelayed: number;
+    normalCancelled: number;
+    delayedDifferencePercent: number;
+    cancelledDifferencePercent: number;
+  };
+  today: {
+    delayed: number;
+    cancelled: number;
+  };
+  trend: {
+    direction: "worsening_fast" | "worsening" | "steady" | "improving" | "improving_fast" | "unknown";
+    label: string;
+    changePoints: number | null;
+    windowMinutes: number | null;
+    detail: string;
+  };
+  faa: {
+    activeAdvisories: number;
+    majorAdvisories: number;
+    criticalAdvisories: number;
+    groundStops: number;
+  };
+  baseline: {
+    delayedRate: number;
+    cancelledRate: number;
+    delayedPercent: number;
+    cancelledPercent: number;
+    label: string;
+    source: string;
+    sourceUrl: string;
+  };
+  source: string;
+  sourceUrl: string;
+  updatedAt: string;
+  fetchedAt: string;
+  stale: boolean;
+};
+
 export type AircraftPosition = {
   lat: number;
   lon: number;

@@ -6,11 +6,11 @@ import { boardingEstimate } from "./boarding";
 import type { BoardingEstimate } from "./boarding";
 import { congestionColor, congestionRegions } from "./congestion";
 import type { CongestionRegion } from "./congestion";
-import { fetchAirportDelayNetwork, fetchAirportDelays, fetchAirportRunways, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
+import { fetchAirportDelayNetwork, fetchAirportDelays, fetchAirportRunways, fetchAirTravelHealth, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { flightTiming, timingLabel } from "./flightTiming";
 import type { TimeComparison } from "./flightTiming";
 import { fetchWeather } from "./weather";
-import type { AirportDelayEvent, AirportDelayReport, AirportDelayStatus, AirportRunway, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
+import type { AirportDelayEvent, AirportDelayReport, AirportDelayStatus, AirportRunway, AirTravelHealth, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
 
 const storageKey = "triptracker:flights";
@@ -584,6 +584,114 @@ function historyDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(`${value}T00:00:00`));
 }
 
+function healthComparison(value: number): string {
+  if (Math.abs(value) < 2) return "Near normal";
+  return `${Math.abs(value)}% ${value > 0 ? "above" : "below"} normal`;
+}
+
+function AirTravelHealthPanel({
+  health,
+  error,
+}: {
+  health: AirTravelHealth | null;
+  error: string | null;
+}) {
+  if (!health) {
+    return (
+      <section className="national-health national-health-loading" aria-live="polite">
+        <div className="national-health-heading">
+          <span className="national-health-icon"><Activity size={20} /></span>
+          <div>
+            <p className="eyebrow">National operations</p>
+            <h2>U.S. Air Travel Health</h2>
+          </div>
+        </div>
+        {error ? (
+          <div className="national-health-unavailable"><AlertTriangle size={18} /> {error}</div>
+        ) : (
+          <div className="national-health-unavailable"><LoaderCircle className="spin" size={18} /> Building live assessment</div>
+        )}
+      </section>
+    );
+  }
+
+  const onTimePercent = Math.round(health.snapshot.onTimeRate * 1000) / 10;
+  const delayedPercent = Math.round(health.snapshot.delayedRate * 1000) / 10;
+  const cancelledPercent = Math.round(health.snapshot.cancelledRate * 1000) / 10;
+  const trendTone = health.trend.direction.startsWith("worsening")
+    ? "worsening"
+    : health.trend.direction.startsWith("improving")
+      ? "improving"
+      : "steady";
+  const TrendIcon = trendTone === "worsening" ? AlertTriangle : trendTone === "improving" ? CheckCircle2 : Activity;
+  const hasDailyTotals = health.today.delayed > 0 || health.today.cancelled > 0;
+
+  return (
+    <section className={`national-health grade-${health.grade.toLowerCase()}`} aria-labelledby="national-health-title">
+      <div className="national-health-heading">
+        <span className="national-health-icon"><Activity size={20} /></span>
+        <div>
+          <p className="eyebrow">National operations</p>
+          <h2 id="national-health-title">U.S. Air Travel Health</h2>
+        </div>
+        <span className="national-health-live"><i /> {health.stale ? "Cached" : "Live"}</span>
+        <div className="national-health-grade" aria-label={`Air travel health grade ${health.grade}, ${health.label}`}>
+          <strong>{health.grade}</strong>
+          <span>{health.label}</span>
+        </div>
+      </div>
+
+      <div className="national-health-body">
+        <div className="national-health-overview">
+          <p>{health.summary}</p>
+          <div
+            className="national-health-bar"
+            aria-label={`${onTimePercent}% on time, ${delayedPercent}% delayed, ${cancelledPercent}% cancelled`}
+          >
+            <span className="on-time" style={{ width: `${onTimePercent}%` }} />
+            <span className="delayed" style={{ width: `${delayedPercent}%` }} />
+            <span className="cancelled" style={{ width: `${cancelledPercent}%` }} />
+          </div>
+          <div className="national-health-legend" aria-hidden="true">
+            <span><i className="on-time" />{onTimePercent}% on time</span>
+            <span><i className="delayed" />{delayedPercent}% delayed</span>
+            <span><i className="cancelled" />{cancelledPercent}% cancelled</span>
+          </div>
+        </div>
+
+        <div className="national-health-metrics">
+          <div className="national-health-metric delayed">
+            <span>Delayed now</span>
+            <strong>{health.snapshot.delayed.toLocaleString()}</strong>
+            <small>{health.snapshot.normalDelayed.toLocaleString()} expected at normal</small>
+            <em>{healthComparison(health.snapshot.delayedDifferencePercent)}</em>
+          </div>
+          <div className="national-health-metric cancelled">
+            <span>Cancelled now</span>
+            <strong>{health.snapshot.cancelled.toLocaleString()}</strong>
+            <small>{health.snapshot.normalCancelled.toLocaleString()} expected at normal</small>
+            <em>{healthComparison(health.snapshot.cancelledDifferencePercent)}</em>
+          </div>
+        </div>
+      </div>
+
+      <div className="national-health-signals">
+        <span className={`national-health-trend ${trendTone}`}><TrendIcon size={16} /> {health.trend.label}</span>
+        {hasDailyTotals && <span>Today: {health.today.delayed.toLocaleString()} delays · {health.today.cancelled.toLocaleString()} cancellations</span>}
+        <span>{health.faa.activeAdvisories} active FAA {health.faa.activeAdvisories === 1 ? "advisory" : "advisories"}</span>
+        <time dateTime={health.updatedAt}>Updated {timeAgo(health.updatedAt)}</time>
+      </div>
+
+      <div className="national-health-sources">
+        Compared with the latest BTS national benchmark. Sources: {" "}
+        <a href={health.sourceUrl} target="_blank" rel="noreferrer">FlightAware</a>
+        {" · "}
+        <a href={health.baseline.sourceUrl} target="_blank" rel="noreferrer">BTS</a>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
@@ -608,6 +716,8 @@ export function App() {
   const [airportDelays, setAirportDelays] = useState<AirportDelayReport | null>(null);
   const [airportDelaysError, setAirportDelaysError] = useState<string | null>(null);
   const [isLoadingAirportDelays, setIsLoadingAirportDelays] = useState(false);
+  const [airTravelHealth, setAirTravelHealth] = useState<AirTravelHealth | null>(null);
+  const [airTravelHealthError, setAirTravelHealthError] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastSoundAtRef = useRef<Record<string, number>>({});
@@ -655,6 +765,36 @@ export function App() {
   useEffect(() => {
     const intervalId = window.setInterval(() => setClockNow(Date.now()), 15 * 1000);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let requestInProgress = false;
+
+    const loadAirTravelHealth = async () => {
+      if (requestInProgress) return;
+      requestInProgress = true;
+      try {
+        const result = await fetchAirTravelHealth(controller.signal);
+        if (!controller.signal.aborted) {
+          setAirTravelHealth(result);
+          setAirTravelHealthError(null);
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setAirTravelHealthError(error instanceof Error ? error.message : "National air travel health is unavailable.");
+        }
+      } finally {
+        requestInProgress = false;
+      }
+    };
+
+    void loadAirTravelHealth();
+    const intervalId = window.setInterval(() => void loadAirTravelHealth(), 60 * 1000);
+    return () => {
+      controller.abort();
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
@@ -1072,6 +1212,8 @@ export function App() {
           </span>
         </div>
       </section>
+
+      <AirTravelHealthPanel health={airTravelHealth} error={airTravelHealthError} />
 
       {flights.length > 0 && (
         <section className="top-flight-switcher" aria-label="Tracked flights">

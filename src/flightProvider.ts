@@ -1,5 +1,5 @@
 import { resolveAirline } from "./airlines";
-import type { AirportDelayReport, FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
+import type { AirportDelayReport, AirTravelHealth, FlightLeg, FlightLookupResult, FlightSearchResult, FlightStatistics, RunwayCatalog } from "./types";
 
 export type FlightNotificationResult = {
   ok: boolean;
@@ -89,6 +89,15 @@ export async function fetchAirportDelayNetwork(signal?: AbortSignal): Promise<Ai
     throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "Regional airport delay status is unavailable.");
   }
   return await response.json() as AirportDelayReport;
+}
+
+export async function fetchAirTravelHealth(signal?: AbortSignal): Promise<AirTravelHealth> {
+  const response = await fetch(`${apiBase()}/air-travel-health`, { signal });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string; detail?: string } | null;
+    throw new Error(payload?.detail ? `${payload.error} ${payload.detail}` : payload?.error ?? "National air travel health is unavailable.");
+  }
+  return await response.json() as AirTravelHealth;
 }
 
 export async function sendFlightNotification(eventType: "tracked" | "updated" | "concluded", flight: FlightLeg, changes: string[] = []): Promise<FlightNotificationResult> {

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import nodemailer from "nodemailer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildAirTravelHealth, parseFlightAwareDailyTotals } from "./server/airTravelHealth.js";
 import { summarizeAirportOperations } from "./server/airportOperations.js";
 import { parseFlightAwareHistory, summarizeFlightHistory } from "./server/flightStatistics.js";
 import { createNotificationState, evaluateFlightNotificationPolicy } from "./server/notificationPolicy.js";
@@ -19,6 +20,8 @@ const flightAwareBaseUrl = "https://aeroapi.flightaware.com/aeroapi";
 const airplanesLiveBaseUrl = "https://api.airplanes.live/v2";
 const adsbLolBaseUrl = "https://api.adsb.lol/v2";
 const faaNasBaseUrl = "https://nasstatus.faa.gov/api";
+const flightAwareMiseryBaseUrl = "https://www.flightaware.com/ajax/ignoreall/miserymap";
+const flightAwareCancellationUrl = "https://www.flightaware.com/live/cancelled";
 const smsRecipient = process.env.TRIPTRACKER_SMS_TO ?? "James.schliesske@gmail.com";
 const smsRecipients = smsRecipient.split(",").map((recipient) => recipient.trim()).filter(Boolean);
 const smsFrom = process.env.TRIPTRACKER_SMTP_USER ?? "James.schliesske@gmail.com";
@@ -31,6 +34,9 @@ const flightSearchCacheMs = 60 * 1000;
 const flightLookupCacheMs = 10 * 1000;
 const flightStatisticsCacheMs = 6 * 60 * 60 * 1000;
 const airportOperationsCacheMs = 60 * 1000;
+const airTravelHealthCacheMs = 60 * 1000;
+const airTravelHistoryCacheMs = 15 * 60 * 1000;
+const airTravelDailyCacheMs = 5 * 60 * 1000;
 const serverTrackingPollMs = Math.max(5000, Number(process.env.TRIPTRACKER_POLL_MS) || 30000);
 const serverTrackingConcurrency = Math.max(1, Math.min(8, Number(process.env.TRIPTRACKER_POLL_CONCURRENCY) || 4));
 const healthCacheMs = 1000;
@@ -49,6 +55,10 @@ const flightLookupCache = new ExpiringRequestCache({ ttlMs: flightLookupCacheMs,
 const flightStatisticsCache = new Map();
 let airportOperationsCache = null;
 let airportOperationsRequest = null;
+let airTravelHealthCache = null;
+let airTravelHealthRequest = null;
+let airTravelHistoryCache = null;
+let airTravelDailyCache = null;
 let healthCache = null;
 let serverTrackingPollInProgress = false;
 let conclusionSweepPromise = null;
@@ -107,6 +117,19 @@ app.get(["/healthz", "/trip/healthz"], (_request, response) => {
   };
   healthCache = { checkedAt: now, status, payload };
   response.status(status).json(payload);
+});
+
+app.get(["/api/air-travel-health", "/trip/api/air-travel-health"], async (_request, response) => {
+  try {
+    const payload = await fetchAirTravelHealth();
+    response.setHeader("Cache-Control", "no-store");
+    response.json(payload);
+  } catch (error) {
+    response.status(502).json({
+      error: "National air travel health is temporarily unavailable.",
+      detail: error instanceof Error ? error.message : "Live national operations lookup failed.",
+    });
+  }
 });
 
 function healthFileCheck(filePath, mode) {
@@ -910,6 +933,111 @@ async function fetchFaaAirportOperations() {
   })();
 
   return airportOperationsRequest;
+}
+
+async function fetchAirTravelHealth() {
+  if (airTravelHealthCache?.expiresAt > Date.now()) return airTravelHealthCache.payload;
+  if (airTravelHealthRequest) return airTravelHealthRequest;
+
+  const stalePayload = airTravelHealthCache?.payload;
+  airTravelHealthRequest = (async () => {
+    try {
+      const [realtime, historical, dailyTotals, faaFeed] = await Promise.all([
+        fetchFlightAwareMiseryRealtime(),
+        fetchFlightAwareMiseryHistory().catch(() => []),
+        fetchFlightAwareDailyTotals().catch(() => ({ delayed: 0, cancelled: 0 })),
+        fetchFaaAirportOperations().catch(() => null),
+      ]);
+      const faaAirports = faaFeed
+        ? summarizeAirportOperations({
+            requestedCodes: [...new Set([
+              ...faaFeed.pacingAirports.map((airport) => String(airport?.airportId ?? "").trim().toUpperCase()),
+              ...faaFeed.events.map((event) => String(event?.airportId ?? "").trim().toUpperCase()),
+            ])].filter((code) => /^[A-Z0-9]{3}$/.test(code)),
+            events: faaFeed.events,
+            pacingAirports: faaFeed.pacingAirports,
+            fetchedAt: faaFeed.fetchedAt,
+          }).airports
+        : [];
+      const payload = {
+        ...buildAirTravelHealth({
+          realtime,
+          historical,
+          dailyTotals,
+          faaAirports,
+          fetchedAt: new Date().toISOString(),
+        }),
+        stale: false,
+      };
+      airTravelHealthCache = {
+        payload,
+        expiresAt: Date.now() + airTravelHealthCacheMs,
+      };
+      return payload;
+    } catch (error) {
+      if (stalePayload) {
+        return {
+          ...stalePayload,
+          stale: true,
+          fetchedAt: new Date().toISOString(),
+        };
+      }
+      throw error;
+    } finally {
+      airTravelHealthRequest = null;
+    }
+  })();
+
+  return airTravelHealthRequest;
+}
+
+async function fetchFlightAwareMiseryRealtime() {
+  return fetchFlightAwareHealthResource(`${flightAwareMiseryBaseUrl}/realtime.rvt?type=us`, "json");
+}
+
+async function fetchFlightAwareMiseryHistory() {
+  if (airTravelHistoryCache?.expiresAt > Date.now()) return airTravelHistoryCache.value;
+  try {
+    const value = await fetchFlightAwareHealthResource(`${flightAwareMiseryBaseUrl}/historical.rvt?type=us`, "json");
+    const snapshots = Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : [];
+    airTravelHistoryCache = {
+      value: snapshots,
+      expiresAt: Date.now() + airTravelHistoryCacheMs,
+    };
+    return snapshots;
+  } catch (error) {
+    if (airTravelHistoryCache?.value) return airTravelHistoryCache.value;
+    throw error;
+  }
+}
+
+async function fetchFlightAwareDailyTotals() {
+  if (airTravelDailyCache?.expiresAt > Date.now()) return airTravelDailyCache.value;
+  try {
+    const html = await fetchFlightAwareHealthResource(flightAwareCancellationUrl, "text");
+    const value = parseFlightAwareDailyTotals(html);
+    airTravelDailyCache = {
+      value,
+      expiresAt: Date.now() + airTravelDailyCacheMs,
+    };
+    return value;
+  } catch (error) {
+    if (airTravelDailyCache?.value) return airTravelDailyCache.value;
+    throw error;
+  }
+}
+
+async function fetchFlightAwareHealthResource(url, format) {
+  const response = await fetch(url, {
+    headers: {
+      ...browserHeaders(),
+      Accept: format === "json" ? "application/json" : "text/html,application/xhtml+xml",
+      Referer: "https://www.flightaware.com/miserymap/",
+    },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`FlightAware national operations returned ${response.status}.`);
+  return format === "json" ? response.json() : response.text();
 }
 
 async function lookupFlightStatistics({ ident, airline, flightNumber, origin, destination, date, originTimeZone }) {

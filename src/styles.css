@@ -281,6 +281,268 @@ h1 {
   font-weight: 800;
 }
 
+.national-health {
+  --health-tone: var(--cyan);
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--health-tone) 9%, transparent), transparent 42%),
+    rgba(13, 20, 29, 0.97);
+  border: 1px solid color-mix(in srgb, var(--health-tone) 38%, var(--line));
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.26);
+  margin: 0 auto 18px;
+  max-width: 1280px;
+  overflow: hidden;
+  padding: 16px 18px 13px;
+  position: relative;
+}
+
+.national-health::before {
+  background: var(--health-tone);
+  bottom: 0;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 4px;
+}
+
+.national-health.grade-a { --health-tone: var(--green); }
+.national-health.grade-b { --health-tone: var(--cyan); }
+.national-health.grade-c { --health-tone: var(--amber); }
+.national-health.grade-d { --health-tone: var(--orange); }
+.national-health.grade-f { --health-tone: var(--red); }
+
+.national-health-heading {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.national-health-heading h2 {
+  font-size: 1.12rem;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.national-health-heading .eyebrow {
+  color: var(--health-tone);
+  font-size: 0.68rem;
+  margin-bottom: 3px;
+}
+
+.national-health-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--health-tone) 12%, var(--panel-soft));
+  border: 1px solid color-mix(in srgb, var(--health-tone) 42%, transparent);
+  border-radius: 50%;
+  color: var(--health-tone);
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.national-health-live {
+  align-items: center;
+  color: #c9d8e1;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 900;
+  gap: 6px;
+  text-transform: uppercase;
+}
+
+.national-health-live i {
+  animation: radar-pulse 2s ease-in-out infinite;
+  background: var(--health-tone);
+  border-radius: 50%;
+  box-shadow: 0 0 9px color-mix(in srgb, var(--health-tone) 70%, transparent);
+  height: 7px;
+  width: 7px;
+}
+
+.national-health-grade {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 130px;
+}
+
+.national-health-grade strong {
+  align-items: center;
+  background: var(--health-tone);
+  border-radius: 6px;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--health-tone) 22%, transparent);
+  color: #071016;
+  display: inline-flex;
+  font-size: 1.7rem;
+  height: 46px;
+  justify-content: center;
+  line-height: 1;
+  width: 46px;
+}
+
+.national-health-grade span {
+  color: var(--health-tone);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1.15;
+  max-width: 80px;
+}
+
+.national-health-body {
+  border-top: 1px solid rgba(154, 174, 187, 0.18);
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.national-health-overview > p {
+  color: #dce8ed;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
+
+.national-health-bar {
+  background: #26313d;
+  border-radius: 3px;
+  display: flex;
+  height: 9px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.national-health-bar span { min-width: 1px; }
+.national-health-bar .on-time,
+.national-health-legend i.on-time { background: var(--green); }
+.national-health-bar .delayed,
+.national-health-legend i.delayed { background: var(--amber); }
+.national-health-bar .cancelled,
+.national-health-legend i.cancelled { background: var(--red); }
+
+.national-health-legend {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 7px 16px;
+  margin-top: 7px;
+}
+
+.national-health-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.national-health-legend i {
+  border-radius: 50%;
+  height: 7px;
+  width: 7px;
+}
+
+.national-health-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.national-health-metric {
+  border-left: 1px solid var(--line);
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 18px;
+}
+
+.national-health-metric > span {
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.national-health-metric strong {
+  color: var(--amber);
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.national-health-metric.cancelled strong { color: var(--red); }
+
+.national-health-metric small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.national-health-metric em {
+  color: #d7e2e8;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.national-health-signals {
+  align-items: center;
+  border-top: 1px solid rgba(154, 174, 187, 0.18);
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 7px 18px;
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.national-health-signals > span:not(:first-child),
+.national-health-signals time {
+  border-left: 1px solid var(--line);
+  padding-left: 18px;
+}
+
+.national-health-trend {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.national-health-trend.worsening { color: var(--red); }
+.national-health-trend.improving { color: var(--green); }
+.national-health-trend.steady { color: var(--cyan); }
+
+.national-health-sources {
+  color: #718895;
+  font-size: 0.64rem;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.national-health-sources a { color: #8bdfee; }
+
+.national-health-loading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 80px;
+}
+
+.national-health-unavailable {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 0.82rem;
+  font-weight: 800;
+  gap: 8px;
+}
+
 .tracker-grid {
   display: grid;
   gap: 18px;
@@ -2561,6 +2823,24 @@ dd {
     display: none;
   }
 
+  .national-health-heading {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .national-health-live {
+    display: none;
+  }
+
+  .national-health-body {
+    gap: 14px;
+    grid-template-columns: 1fr;
+  }
+
+  .national-health-metric:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+
   .brand-mark {
     height: 50px;
     min-width: 50px;
@@ -2676,6 +2956,62 @@ dd {
 
   .freshness {
     align-items: flex-start;
+  }
+
+  .national-health {
+    padding: 14px;
+  }
+
+  .national-health-heading {
+    gap: 9px;
+  }
+
+  .national-health-icon {
+    height: 34px;
+    width: 34px;
+  }
+
+  .national-health-grade {
+    gap: 0;
+    min-width: 42px;
+  }
+
+  .national-health-grade strong {
+    font-size: 1.4rem;
+    height: 40px;
+    width: 40px;
+  }
+
+  .national-health-grade span {
+    display: none;
+  }
+
+  .national-health-metrics {
+    gap: 12px;
+    grid-template-columns: 1fr;
+  }
+
+  .national-health-metric,
+  .national-health-metric:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .national-health-metric + .national-health-metric {
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+  }
+
+  .national-health-signals > span:not(:first-child),
+  .national-health-signals time {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .national-health-loading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .reliability-panel {
