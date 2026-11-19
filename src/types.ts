@@ -67,6 +67,21 @@ export type FlightHistoryRecord = {
   outcome: "Completed" | "Delayed" | "Severely delayed" | "Cancelled";
 };
 
+export type AircraftTypeEstimate = {
+  code: string;
+  name: string;
+  matches: number;
+  sampleSize: number;
+  sharePercent: number;
+  confidence: "Limited" | "Moderate" | "Strong";
+  alternatives: Array<{
+    code: string;
+    name: string;
+    matches: number;
+    sharePercent: number;
+  }>;
+};
+
 export type FlightStatistics = {
   flightNumber: string;
   route: string;
@@ -85,6 +100,7 @@ export type FlightStatistics = {
   historicalRiskPercent: number | null;
   historicalAssessment: "Low" | "Moderate" | "High" | "Insufficient data";
   confidence: "Limited" | "Moderate" | "Strong";
+  aircraftEstimate: AircraftTypeEstimate | null;
   recentIssues: FlightHistoryRecord[];
   records: FlightHistoryRecord[];
   source: string;

@@ -1716,6 +1716,33 @@ dt,
   color: #c7ecff;
 }
 
+.compact-facts .aircraft-fact.estimated {
+  grid-column: span 2;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+}
+
+.compact-facts .aircraft-fact b {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.compact-facts .aircraft-fact small {
+  color: var(--amber);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.compact-facts .aircraft-fact em {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
 .compact-facts .inbound-fact {
   border-radius: 8px;
   grid-column: 1 / -1;
@@ -1933,6 +1960,71 @@ dt,
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 800;
+}
+
+.aircraft-history-assessment {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 15px 4px;
+}
+
+.aircraft-history-assessment > svg {
+  color: var(--cyan);
+  filter: drop-shadow(0 0 8px rgba(78, 217, 255, 0.3));
+}
+
+.aircraft-history-assessment > div {
+  display: grid;
+  gap: 3px;
+}
+
+.aircraft-history-assessment small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.aircraft-history-assessment strong {
+  font-size: 1rem;
+}
+
+.aircraft-history-assessment strong span {
+  color: var(--cyan);
+  font-size: 0.78rem;
+  margin-left: 5px;
+}
+
+.aircraft-history-assessment p {
+  color: #aebfca;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.aircraft-history-assessment > em {
+  border: 1px solid #3b5262;
+  border-radius: 999px;
+  color: #c8d7df;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 900;
+  padding: 6px 9px;
+  white-space: nowrap;
+}
+
+.aircraft-history-assessment > em.confidence-strong {
+  border-color: rgba(76, 226, 154, 0.5);
+  color: var(--green);
+}
+
+.aircraft-history-assessment > em.confidence-moderate {
+  border-color: rgba(255, 209, 102, 0.5);
+  color: var(--amber);
 }
 
 .history-issues {
@@ -2896,6 +2988,16 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .aircraft-history-assessment {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .aircraft-history-assessment > em {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .airport-delay-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -2937,6 +3039,10 @@ dd {
   .gate-row,
   .compact-facts {
     grid-template-columns: 1fr;
+  }
+
+  .compact-facts .aircraft-fact.estimated {
+    grid-column: 1 / -1;
   }
 
   .empty-state {

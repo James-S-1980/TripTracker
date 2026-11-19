@@ -734,6 +734,11 @@ export function App() {
   const activeStatisticsKey = activeFlight ? flightIdentityKey(activeFlight) : "";
   const activeAirportDelayKey = activeFlight ? `${activeFlight.origin.code}:${activeFlight.destination.code}` : "";
   const activeTailNumber = activeFlight?.tailNumber ?? activeFlight?.aircraftPosition?.tailNumber;
+  const activeAircraftEstimate = !activeTailNumber
+    && activeFlight
+    && statistics?.route === `${activeFlight.origin.code}-${activeFlight.destination.code}`
+      ? statistics.aircraftEstimate
+      : null;
   const activeInboundStatus = inboundStatusLabel(activeFlight?.inboundStatus);
   const activeInboundText = activeFlight?.inboundFrom
     ? `${activeFlight.inboundFrom.code} ${activeFlight.inboundFrom.city}${activeFlight.inboundFlightNumber ? ` via ${activeFlight.inboundFlightNumber}` : ""}${activeInboundStatus ? `, ${activeInboundStatus}` : ""}`
@@ -1486,13 +1491,24 @@ export function App() {
                   <div className="compact-facts">
                     <span><Timer size={15} /> {activeFlight.groundSpeedMph ? `${activeFlight.groundSpeedMph} mph` : "Speed pending"}</span>
                     <span><Plane size={15} /> {altitudeLabel(activeFlight)}</span>
-                    <span>
-                      <Plane size={15} /> Tail{" "}
+                    <span className={`aircraft-fact ${!activeTailNumber ? "estimated" : ""}`}>
+                      <Plane size={15} />
                       {activeTailNumber ? (
-                        <a href={aircraftPhotoUrl(activeTailNumber)} target="_blank" rel="noreferrer" title={`View photos of ${activeTailNumber}`}>
+                        <>Tail{" "}<a href={aircraftPhotoUrl(activeTailNumber)} target="_blank" rel="noreferrer" title={`View photos of ${activeTailNumber}`}>
                           {activeTailNumber}
-                        </a>
-                      ) : "pending"}
+                        </a></>
+                      ) : activeAircraftEstimate ? (
+                        <b>
+                          <small>Tail pending · likely aircraft</small>
+                          {activeAircraftEstimate.name}
+                          <em>{activeAircraftEstimate.code} · {activeAircraftEstimate.matches} of {activeAircraftEstimate.sampleSize} prior flights · {activeAircraftEstimate.confidence.toLowerCase()} confidence</em>
+                        </b>
+                      ) : (
+                        <b>
+                          <small>Tail pending</small>
+                          {isLoadingStatistics ? "Assessing aircraft type" : "No reliable type estimate"}
+                        </b>
+                      )}
                     </span>
                     <span className="inbound-fact"><MapPin size={15} /> Inbound {activeInboundText || "pending"}</span>
                     <span><MapPin size={15} /> Updated {timeAgo(activeFlight.lastUpdated)}</span>
@@ -1816,6 +1832,23 @@ function FlightStatisticsPanel({
                 <span>Average departure</span>
               </div>
             </div>
+
+            {!flight.tailNumber && !flight.aircraftPosition?.tailNumber && statistics.aircraftEstimate && (
+              <div className="aircraft-history-assessment">
+                <Plane size={23} />
+                <div>
+                  <small>Likely aircraft from route history</small>
+                  <strong>{statistics.aircraftEstimate.name} <span>{statistics.aircraftEstimate.code}</span></strong>
+                  <p>
+                    Used on {statistics.aircraftEstimate.matches} of {statistics.aircraftEstimate.sampleSize} prior {statistics.route} operations with known equipment.
+                    {statistics.aircraftEstimate.alternatives.length > 0 && ` Other observed types: ${statistics.aircraftEstimate.alternatives.map((aircraft) => aircraft.code).join(", ")}.`}
+                  </p>
+                </div>
+                <em className={`confidence-${statistics.aircraftEstimate.confidence.toLowerCase()}`}>
+                  {statistics.aircraftEstimate.confidence} confidence
+                </em>
+              </div>
+            )}
 
             <div className="history-issues">
               <div>

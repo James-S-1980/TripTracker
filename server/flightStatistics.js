@@ -3,6 +3,82 @@ const delayedOutcome = "Delayed";
 const severeDelayOutcome = "Severely delayed";
 const cancelledOutcome = "Cancelled";
 
+const aircraftTypeNames = {
+  A318: "Airbus A318",
+  A319: "Airbus A319",
+  A320: "Airbus A320",
+  A321: "Airbus A321",
+  A20N: "Airbus A320neo",
+  A21N: "Airbus A321neo",
+  A332: "Airbus A330-200",
+  A333: "Airbus A330-300",
+  A338: "Airbus A330-800neo",
+  A339: "Airbus A330-900neo",
+  A343: "Airbus A340-300",
+  A346: "Airbus A340-600",
+  A359: "Airbus A350-900",
+  A35K: "Airbus A350-1000",
+  A388: "Airbus A380-800",
+  BCS1: "Airbus A220-100",
+  BCS3: "Airbus A220-300",
+  B712: "Boeing 717-200",
+  B733: "Boeing 737-300",
+  B734: "Boeing 737-400",
+  B735: "Boeing 737-500",
+  B736: "Boeing 737-600",
+  B737: "Boeing 737-700",
+  B738: "Boeing 737-800",
+  B739: "Boeing 737-900",
+  B37M: "Boeing 737 MAX 7",
+  B38M: "Boeing 737 MAX 8",
+  B39M: "Boeing 737 MAX 9",
+  B3XM: "Boeing 737 MAX 10",
+  B744: "Boeing 747-400",
+  B748: "Boeing 747-8",
+  B752: "Boeing 757-200",
+  B753: "Boeing 757-300",
+  B762: "Boeing 767-200",
+  B763: "Boeing 767-300",
+  B764: "Boeing 767-400",
+  B772: "Boeing 777-200",
+  B773: "Boeing 777-300",
+  B77L: "Boeing 777-200LR",
+  B77W: "Boeing 777-300ER",
+  B788: "Boeing 787-8",
+  B789: "Boeing 787-9",
+  B78X: "Boeing 787-10",
+  CRJ2: "Bombardier CRJ-200",
+  CRJ7: "Bombardier CRJ-700",
+  CRJ9: "Bombardier CRJ-900",
+  CRJX: "Bombardier CRJ-1000",
+  DH8A: "De Havilland Dash 8-100",
+  DH8B: "De Havilland Dash 8-200",
+  DH8C: "De Havilland Dash 8-300",
+  DH8D: "De Havilland Dash 8-400",
+  E135: "Embraer ERJ-135",
+  E145: "Embraer ERJ-145",
+  E170: "Embraer 170",
+  E175: "Embraer 175",
+  E75L: "Embraer 175",
+  E75S: "Embraer 175",
+  E190: "Embraer 190",
+  E195: "Embraer 195",
+  E290: "Embraer E190-E2",
+  E295: "Embraer E195-E2",
+  MD11: "McDonnell Douglas MD-11",
+  MD80: "McDonnell Douglas MD-80",
+  MD82: "McDonnell Douglas MD-82",
+  MD83: "McDonnell Douglas MD-83",
+  MD88: "McDonnell Douglas MD-88",
+  MD90: "McDonnell Douglas MD-90",
+  AT43: "ATR 42-300",
+  AT45: "ATR 42-500",
+  AT46: "ATR 42-600",
+  AT72: "ATR 72-200",
+  AT75: "ATR 72-500",
+  AT76: "ATR 72-600",
+};
+
 export function parseFlightAwareHistory(html, options) {
   const {
     origin,
@@ -86,6 +162,7 @@ export function summarizeFlightHistory(records, metadata) {
   const sampleSize = records.length;
   const issueRate = sampleSize > 0 ? Math.round(issueCount / sampleSize * 100) : 0;
   const smoothedRisk = sampleSize > 0 ? Math.round((issueCount + 2) / (sampleSize + 8) * 100) : null;
+  const aircraftEstimate = estimateAircraftType(records);
 
   return {
     flightNumber: metadata.flightNumber,
@@ -105,6 +182,7 @@ export function summarizeFlightHistory(records, metadata) {
     historicalRiskPercent: smoothedRisk,
     historicalAssessment: riskLabel(smoothedRisk),
     confidence: confidenceLabel(sampleSize),
+    aircraftEstimate,
     recentIssues: records
       .filter((record) => record.outcome !== completedOutcome)
       .slice(0, 5),
@@ -112,7 +190,47 @@ export function summarizeFlightHistory(records, metadata) {
     source: "FlightAware public activity log",
     sourceUrl: metadata.sourceUrl,
     updatedAt: new Date().toISOString(),
-    coverage: "Departure punctuality and cancellations for prior route-matched operations",
+    coverage: "Departure punctuality, cancellations, and aircraft-type evidence for prior route-matched operations",
+  };
+}
+
+export function estimateAircraftType(records) {
+  const counts = new Map();
+  for (const [index, record] of (Array.isArray(records) ? records : []).entries()) {
+    if (record?.outcome === cancelledOutcome) continue;
+    const aircraft = normalizedAircraftType(record?.aircraft);
+    if (!aircraft) continue;
+    const current = counts.get(aircraft.code) ?? { ...aircraft, matches: 0, newestIndex: index };
+    current.matches += 1;
+    counts.set(aircraft.code, current);
+  }
+
+  const sampleSize = [...counts.values()].reduce((sum, aircraft) => sum + aircraft.matches, 0);
+  if (sampleSize === 0) return null;
+
+  const ranked = [...counts.values()]
+    .map((aircraft) => ({
+      ...aircraft,
+      sharePercent: Math.round(aircraft.matches / sampleSize * 100),
+    }))
+    .sort((left, right) => right.matches - left.matches || left.newestIndex - right.newestIndex || left.code.localeCompare(right.code));
+  const leading = ranked[0];
+  const runnerUp = ranked[1];
+  const leadMargin = leading.sharePercent - (runnerUp?.sharePercent ?? 0);
+  const confidence = sampleSize >= 6 && leading.sharePercent >= 70 && leadMargin >= 25
+    ? "Strong"
+    : sampleSize >= 3 && leading.sharePercent >= 50 && leadMargin >= 15
+      ? "Moderate"
+      : "Limited";
+
+  return {
+    code: leading.code,
+    name: leading.name,
+    matches: leading.matches,
+    sampleSize,
+    sharePercent: leading.sharePercent,
+    confidence,
+    alternatives: ranked.slice(1, 3).map(({ newestIndex: _newestIndex, ...aircraft }) => aircraft),
   };
 }
 
@@ -180,6 +298,19 @@ function plainText(value) {
 function usefulText(value) {
   const normalized = String(value ?? "").trim();
   return normalized && !/^[-?]$/.test(normalized) ? normalized : undefined;
+}
+
+function normalizedAircraftType(value) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (!normalized || /^(?:UNKNOWN|UNAVAILABLE|PENDING|N\/A|NONE)$/.test(normalized)) return null;
+  const tokens = normalized.match(/[A-Z0-9]{3,4}/g) ?? [];
+  const code = tokens.find((token) => aircraftTypeNames[token])
+    ?? tokens.find((token) => /[A-Z]/.test(token) && /\d/.test(token));
+  if (!code) return null;
+  return {
+    code,
+    name: aircraftTypeNames[code] ?? code,
+  };
 }
 
 function decodeEntities(value) {

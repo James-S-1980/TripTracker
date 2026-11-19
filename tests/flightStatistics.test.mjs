@@ -55,6 +55,42 @@ test("parses route-matched history and classifies operational issues", () => {
   assert.equal(summary.averageDepartureDelayMinutes, 28);
   assert.equal(summary.medianDepartureDelayMinutes, 16);
   assert.equal(summary.recentIssues.length, 3);
+  assert.deepEqual(summary.aircraftEstimate, {
+    code: "A321",
+    name: "Airbus A321",
+    matches: 3,
+    sampleSize: 3,
+    sharePercent: 100,
+    confidence: "Moderate",
+    alternatives: [],
+  });
+});
+
+test("estimates the dominant aircraft type and reports competing evidence", () => {
+  const records = [
+    ...Array.from({ length: 7 }, (_, index) => ({ date: `2026-10-${String(20 - index).padStart(2, "0")}`, aircraft: "B738", outcome: "Completed", departureDelayMinutes: 0 })),
+    ...Array.from({ length: 2 }, (_, index) => ({ date: `2026-10-${String(10 - index).padStart(2, "0")}`, aircraft: "B38M", outcome: "Completed", departureDelayMinutes: 0 })),
+    { date: "2026-10-01", aircraft: "Unknown", outcome: "Completed", departureDelayMinutes: 0 },
+  ];
+  const summary = summarizeFlightHistory(records, {
+    flightNumber: "WN 4897",
+    origin: "BWI",
+    destination: "MCO",
+    sourceUrl: "https://www.flightaware.com/live/flight/SWA4897/history",
+  });
+
+  assert.equal(summary.aircraftEstimate.code, "B738");
+  assert.equal(summary.aircraftEstimate.name, "Boeing 737-800");
+  assert.equal(summary.aircraftEstimate.matches, 7);
+  assert.equal(summary.aircraftEstimate.sampleSize, 9);
+  assert.equal(summary.aircraftEstimate.sharePercent, 78);
+  assert.equal(summary.aircraftEstimate.confidence, "Strong");
+  assert.deepEqual(summary.aircraftEstimate.alternatives, [{
+    code: "B38M",
+    name: "Boeing 737 MAX 8",
+    matches: 2,
+    sharePercent: 22,
+  }]);
 });
 
 test("supports explicit international ICAO aliases", () => {
