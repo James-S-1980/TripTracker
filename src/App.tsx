@@ -9,6 +9,7 @@ import type { CongestionRegion } from "./congestion";
 import { fetchAirportDelayNetwork, fetchAirportDelays, fetchAirportRunways, fetchAirTravelHealth, fetchFlightStatistics, fetchTrackedFlights, lookupFlight, registerTrackedFlights, searchFlights, sendFlightNotification, untrackFlight } from "./flightProvider";
 import { flightTiming, timingLabel } from "./flightTiming";
 import type { TimeComparison } from "./flightTiming";
+import { dedupeFlightsByIdentity, flightIdentityKey, mergeFlightSources } from "./trackedFlights";
 import { fetchWeather } from "./weather";
 import type { AirportDelayEvent, AirportDelayReport, AirportDelayStatus, AirportRunway, AirTravelHealth, FlightLeg, FlightLookupResult, FlightStatistics, RunwayCatalog, RunwayEnd, WeatherSnapshot } from "./types";
 import "leaflet/dist/leaflet.css";
@@ -416,27 +417,29 @@ function replaceFlightStatusAlert(flight: FlightLeg, status: FlightLeg["status"]
 }
 
 function mergeTrackedFlightLists(localFlights: FlightLeg[], serverFlights: FlightLeg[]): FlightLeg[] {
-  const merged = new Map<string, FlightLeg>();
-  localFlights.forEach((flight) => {
-    if (!shouldRemoveLandedFlight(flight)) merged.set(flight.id, flight);
-  });
-  serverFlights.forEach((flight) => {
-    if (!shouldRemoveLandedFlight(flight)) {
-      merged.set(flight.id, mergeKnownFlightEnrichment(merged.get(flight.id), flight));
-    }
-  });
-  return [...merged.values()].sort((a, b) => (
-    new Date(b.lastUpdated ?? b.departureTime).getTime() - new Date(a.lastUpdated ?? a.departureTime).getTime()
-  ));
+  return mergeFlightSources(
+    localFlights.filter((flight) => !shouldRemoveLandedFlight(flight)),
+    serverFlights.filter((flight) => !shouldRemoveLandedFlight(flight)),
+    mergeKnownFlightEnrichment,
+  );
 }
 
-function flightIdentityKey(flight: FlightLeg): string {
-  return [
-    flight.flightNumber.replace(/\s+/g, "").toUpperCase(),
-    flight.date,
-    flight.origin.code,
-    flight.destination.code,
-  ].join("::");
+function dedupeTrackedFlightList(flights: FlightLeg[]): FlightLeg[] {
+  return dedupeFlightsByIdentity(
+    flights.filter((flight) => !shouldRemoveLandedFlight(flight)),
+    mergeKnownFlightEnrichment,
+  );
+}
+
+function loadStoredFlights(): FlightLeg[] {
+  try {
+    const saved = window.localStorage.getItem(storageKey);
+    if (!saved) return [];
+    const parsed = JSON.parse(saved) as unknown;
+    return Array.isArray(parsed) ? dedupeTrackedFlightList(parsed as FlightLeg[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function serverTrackedFlightKey(flight: FlightLeg): string {
@@ -696,10 +699,7 @@ export function App() {
   const [airline, setAirline] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [flights, setFlights] = useState<FlightLeg[]>(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    return saved ? JSON.parse(saved) as FlightLeg[] : [];
-  });
+  const [flights, setFlights] = useState<FlightLeg[]>(loadStoredFlights);
   const [activeId, setActiveId] = useState<string | null>(flights[0]?.id ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [weather, setWeather] = useState<Record<string, WeatherSnapshot>>({});
@@ -760,8 +760,9 @@ export function App() {
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(flights));
-    const trackableFlights = flights.filter((flight) => !serverUntrackedFlightKeysRef.current.has(serverTrackedFlightKey(flight)));
-    const signature = trackableFlights.map(serverTrackedFlightKey).sort().join("|");
+    const trackableFlights = dedupeTrackedFlightList(flights)
+      .filter((flight) => !serverUntrackedFlightKeysRef.current.has(serverTrackedFlightKey(flight)));
+    const signature = [...new Set(trackableFlights.map(serverTrackedFlightKey))].sort().join("|");
     if (signature === lastRegistrationSignatureRef.current) return;
     lastRegistrationSignatureRef.current = signature;
     void registerTrackedFlights(trackableFlights);
@@ -975,7 +976,7 @@ export function App() {
       const flight = landedDisplayFlight(result);
       deletedFlightKeysRef.current.delete(flightIdentityKey(flight));
       serverUntrackedFlightKeysRef.current.delete(serverTrackedFlightKey(flight));
-      setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
+      setFlights((current) => [flight, ...current.filter((item) => flightIdentityKey(item) !== flightIdentityKey(flight))]);
       setActiveId(flight.id);
       setLastRefreshAt(new Date().toISOString());
     } catch (error) {
@@ -998,7 +999,7 @@ export function App() {
       )));
       deletedFlightKeysRef.current.delete(flightIdentityKey(flight));
       serverUntrackedFlightKeysRef.current.delete(serverTrackedFlightKey(flight));
-      setFlights((current) => [flight, ...current.filter((item) => item.id !== flight.id)]);
+      setFlights((current) => [flight, ...current.filter((item) => flightIdentityKey(item) !== flightIdentityKey(flight))]);
       setActiveId(flight.id);
       setLiveMatches([]);
       setLiveSearchMessage(null);
@@ -1105,13 +1106,13 @@ export function App() {
 
     if (refreshMap.size > 0 || concludedIds.size > 0) {
       setFlights((current) => {
-        const nextFlights = current
+        const nextFlights = dedupeTrackedFlightList(current
           .map((flight) => refreshMap.get(flight.id) ?? flight)
           .filter((flight) => (
             !concludedIds.has(flight.id)
             && !deletedFlightKeysRef.current.has(flightIdentityKey(flight))
             && !serverUntrackedFlightKeysRef.current.has(serverTrackedFlightKey(flight))
-          ));
+          )));
         setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, nextFlights, concludedIds));
         return nextFlights;
       });
@@ -1135,8 +1136,10 @@ export function App() {
     deletedFlightKeysRef.current.add(flightIdentityKey(removedFlight));
     serverUntrackedFlightKeysRef.current.add(serverTrackedFlightKey(removedFlight));
     setFlights((current) => {
-      const next = current.filter((flight) => flight.id !== flightId);
-      setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, next, new Set([flightId])));
+      const removedIdentity = flightIdentityKey(removedFlight);
+      const removedIds = new Set(current.filter((flight) => flightIdentityKey(flight) === removedIdentity).map((flight) => flight.id));
+      const next = current.filter((flight) => flightIdentityKey(flight) !== removedIdentity);
+      setActiveId((currentActiveId) => nextActiveId(currentActiveId, current, next, removedIds));
       return next;
     });
   }
